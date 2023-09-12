@@ -21,6 +21,8 @@ contract BaseCollateral {
     uint public lastAccrued;
     mapping (address => uint) public sharesOf;
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
+    uint constant MINIMUM_LIQUIDITY = 10**3;
+    uint constant MINIMUM_BALANCE = 10**3;
 
     constructor(IERC20 _token, ICore _core) {
         token = _token;
@@ -34,9 +36,10 @@ contract BaseCollateral {
         if(feeBps == 0) return;
         uint balance = token.balanceOf(address(this));
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
+        if(fee > balance) fee = balance;
+        if(balance - fee < MINIMUM_BALANCE) fee = balance - MINIMUM_BALANCE;
         if(fee == 0) return;
         lastAccrued = block.timestamp;
-        if(fee > balance) fee = balance;
         token.transfer(feeDestination, fee);
     }
 
@@ -45,12 +48,14 @@ contract BaseCollateral {
         require(core.onCollateralDeposit(msg.sender, recipient, amount), "beforeCollateralDeposit");
         uint shares;
         if(sharesSupply == 0) {
-            shares = amount;
+            sharesOf[address(0)] = MINIMUM_LIQUIDITY;
+            shares = amount - MINIMUM_LIQUIDITY;
+            sharesSupply = amount;
         } else {
             shares = amount * sharesSupply / token.balanceOf(address(this));
+            sharesSupply += shares;
         }
         require(shares > 0, "zeroShares");
-        sharesSupply += shares;
         uint sharesBefore = sharesOf[recipient];
         uint newShares = sharesBefore + shares;
         require(newShares <= sqrtMaxUint, "overflow");
@@ -61,6 +66,7 @@ contract BaseCollateral {
     function withdraw(uint256 amount) public {
         accrueFee();
         require(core.onCollateralWithdraw(msg.sender, amount), "beforeCollateralWithdraw");
+        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares = amount * sharesSupply / token.balanceOf(address(this));
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
@@ -79,6 +85,7 @@ contract BaseCollateral {
 
     function seize(address account, uint256 amount) public {
         require(msg.sender == address(core), "onlyCore");
+        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
         accrueFee();
         uint shares = amount * sharesSupply / token.balanceOf(address(this));
         require(shares > 0, "zeroShares");
