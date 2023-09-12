@@ -37,7 +37,7 @@ contract BaseCollateral {
         uint balance = token.balanceOf(address(this));
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
         if(fee > balance) fee = balance;
-        if(balance - fee < MINIMUM_BALANCE) fee = balance - MINIMUM_BALANCE;
+        if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
         if(fee == 0) return;
         lastAccrued = block.timestamp;
         token.transfer(feeDestination, fee);
@@ -78,15 +78,17 @@ contract BaseCollateral {
         if(sharesSupply == 0) return 0;
         uint256 timeElapsed = block.timestamp - lastAccrued;
         (uint feeBps,) = core.getCollateralFeeBps(address(token));
-        uint256 fee = token.balanceOf(address(this)) * feeBps * timeElapsed / 10000 / 365 days;
-        if(fee > token.balanceOf(address(this))) return 0;
-        return (token.balanceOf(address(this)) - fee) * sharesOf[account] / sharesSupply;
+        uint balance = token.balanceOf(address(this));
+        uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
+        if(fee > balance) fee = balance;
+        if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
+        return (balance - fee) * sharesOf[account] / sharesSupply;
     }
 
     function seize(address account, uint256 amount) public {
         require(msg.sender == address(core), "onlyCore");
-        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
         accrueFee();
+        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares = amount * sharesSupply / token.balanceOf(address(this));
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
