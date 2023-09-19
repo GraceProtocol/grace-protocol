@@ -16,7 +16,7 @@ contract BaseCollateralTest is Test {
     constructor() {
         token = new ERC20();
         mockCore = new MockCore();
-        baseCollateral = new BaseCollateral(IERC20(address(token)), ICore(address(mockCore)));
+        baseCollateral = new BaseCollateral(IERC20(address(token)));
         token.mint(address(this), type(uint256).max);
         token.approve(address(baseCollateral), type(uint256).max);
     }
@@ -193,7 +193,6 @@ contract BaseCollateralTest is Test {
         uint feeBps = 10000;
         uint amount = 1000;
         uint MINIMUM_LIQUIDITY = 1000;
-        uint MINIMUM_BALANCE = 1000;
         baseCollateral.deposit(address(this), amount + MINIMUM_LIQUIDITY);
         assertEq(token.balanceOf(address(baseCollateral)), amount + MINIMUM_LIQUIDITY);
         mockCore.setCollateralFeeBps(feeBps, address(this));

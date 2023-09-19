@@ -15,8 +15,8 @@ interface IERC20 {
 
 contract BaseCollateral {
 
-    IERC20 public token;
-    ICore public core;
+    IERC20 public immutable token;
+    ICore public immutable core;
     uint public sharesSupply;
     uint public lastAccrued;
     mapping (address => uint) public sharesOf;
@@ -24,16 +24,19 @@ contract BaseCollateral {
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
 
-    constructor(IERC20 _token, ICore _core) {
+    constructor(IERC20 _token) {
         token = _token;
-        core = _core;
+        core = ICore(msg.sender);
     }
 
     function accrueFee() public {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         (uint feeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
-        if(feeBps == 0) return;
+        if(feeBps == 0) {
+            lastAccrued = block.timestamp;
+            return;
+        }
         uint balance = token.balanceOf(address(this));
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
         if(fee > balance) fee = balance;
@@ -67,7 +70,13 @@ contract BaseCollateral {
         accrueFee();
         require(core.onCollateralWithdraw(msg.sender, amount), "beforeCollateralWithdraw");
         require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
-        uint shares = amount * sharesSupply / token.balanceOf(address(this));
+        uint shares;
+        if(amount == type(uint256).max) {
+            shares = sharesOf[msg.sender];
+            amount = shares * token.balanceOf(address(this)) / sharesSupply;
+        } else {
+            shares = amount * sharesSupply / token.balanceOf(address(this));
+        }
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[msg.sender] -= shares;
@@ -86,14 +95,18 @@ contract BaseCollateral {
     }
 
     function seize(address account, uint256 amount) public {
-        require(msg.sender == address(core), "onlyCore");
         accrueFee();
+        require(msg.sender == address(core), "onlyCore");
         require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares = amount * sharesSupply / token.balanceOf(address(this));
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[account] -= shares;
         token.transfer(msg.sender, amount);
+    }
+
+    function getTotalCollateral() external view returns (uint256) {
+        return token.balanceOf(address(this));
     }
     
 }

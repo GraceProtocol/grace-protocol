@@ -17,10 +17,12 @@ contract MockCore {
     }
 
     function onCollateralDeposit(address, address, uint256) external returns (bool) {
+        value = value; // silence warning
         return value;
     }
     
     function onCollateralWithdraw(address, uint256) external returns (bool) {
+        value = value; // silence warning
         return value;
     }
 
