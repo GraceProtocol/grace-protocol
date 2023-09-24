@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import "forge-std/Test.sol";
-import "../src/BaseCollateral.sol";
+import "../src/Collateral.sol";
 import "./mocks/ERC20.sol";
 import "./mocks/MockCore.sol";
 
@@ -11,12 +11,12 @@ contract BaseCollateralTest is Test {
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
     ERC20 public token;
     MockCore public mockCore;
-    BaseCollateral public baseCollateral;
+    Collateral public baseCollateral;
 
     constructor() {
         token = new ERC20();
         mockCore = new MockCore();
-        baseCollateral = new BaseCollateral(IERC20(address(token)));
+        baseCollateral = new Collateral(ICollateralUnderlying(address(token)));
         token.mint(address(this), type(uint256).max);
         token.approve(address(baseCollateral), type(uint256).max);
     }

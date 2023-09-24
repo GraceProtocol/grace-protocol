@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-interface ICore {
+interface ICollateralCore {
     function onCollateralDeposit(address caller, address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
     function getCollateralFeeBps(address collateral) external view returns (uint256, address);
 }
 
-interface IERC20 {
+interface ICollateralUnderlying {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }
 
-contract BaseCollateral {
+contract Collateral {
 
-    IERC20 public immutable token;
-    ICore public immutable core;
+    ICollateralUnderlying public immutable token;
+    ICollateralCore public immutable core;
     uint public sharesSupply;
     uint public lastAccrued;
     mapping (address => uint) public sharesOf;
@@ -24,9 +24,9 @@ contract BaseCollateral {
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
 
-    constructor(IERC20 _token) {
+    constructor(ICollateralUnderlying _token) {
         token = _token;
-        core = ICore(msg.sender);
+        core = ICollateralCore(msg.sender);
     }
 
     function accrueFee() public {

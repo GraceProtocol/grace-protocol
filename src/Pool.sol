@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-interface ICore {
+interface IPoolCore {
     function onPoolDeposit(address caller, address recipient, uint256 amount) external returns (bool);
     function onPoolWithdraw(address caller, uint256 amount) external returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
@@ -9,16 +9,16 @@ interface ICore {
     function getBorrowRateBps(address pool) external view returns (uint256, address);
 }
 
-interface IERC20 {
+interface IPoolUnderlying {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }
 
-contract BasePool {
+contract Pool {
 
-    IERC20 public immutable token;
-    ICore public immutable core;
+    IPoolUnderlying public immutable token;
+    IPoolCore public immutable core;
     uint public totalSupply;
     uint public debtSupply;
     uint public totalDebt;
@@ -29,9 +29,9 @@ contract BasePool {
     mapping (address => uint) public balanceOf;
     mapping(address => uint) public debtSharesOf;
 
-    constructor(IERC20 _token) {
+    constructor(IPoolUnderlying _token) {
         token = _token;
-        core = ICore(msg.sender);
+        core = IPoolCore(msg.sender);
     }
 
     function deposit(address recipient, uint256 amount) public {
