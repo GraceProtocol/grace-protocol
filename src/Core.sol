@@ -39,7 +39,8 @@ contract Core {
     uint public addCollateralDelay = 3 hours;
     uint public addPoolDelay = 3 hours;
     uint public liquidationIncentiveBps = 1000; // 10%
-    uint public maxLiquidationIncentiveUsd = 10000e18; // $10,000
+    uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
+    uint public dustUsd = 1000e18; // $1000
     address public owner;
     Oracle public immutable oracle = new Oracle();
     IInterestRateModel public interestRateModel;
@@ -197,6 +198,7 @@ contract Core {
         // enforce both caps
         uint totalCollateralAfter = collateral.getTotalCollateral() + amount;
         uint totalValueAfter = totalCollateralAfter * price / MANTISSA;
+        require(totalValueAfter >= dustUsd, "collateralBalanceTooSmall");
         require(totalValueAfter <= collateralsData[collateral].hardCap, "hardCapExceeded");
         require(totalValueAfter <= softCapUsd, "softCapExceeded");
         if(collateralUsers[collateral][recipient] == false) {
@@ -244,6 +246,7 @@ contract Core {
                 uint thisCollateralBalance = collateral.getCollateralOf(caller);
                 if(thisCollateral == collateral) thisCollateralBalance -= amount;
                 uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
+                if(thisCollateralUsd == collateral && thisCollateralBalance > 0) require(thisCollateralUsd >= dustUsd, "collateralBalanceTooSmall");
                 assetsUsd += thisCollateralUsd;
             }
         }
@@ -327,6 +330,12 @@ contract Core {
         Pool pool = Pool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
 
+        // if first borrow, add to userPools and poolUsers
+        if(poolUsers[pool][caller] == false) {
+            poolUsers[pool][caller] = true;
+            userPools[caller].push(pool);
+        }
+
         // calculate assets
         uint assetsUsd = 0;
         uint weekLow = getSupplyValueWeeklyLow();
@@ -353,17 +362,12 @@ contract Core {
             if(thisPool == pool) debt += amount;
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
+            if(thisPool == pool) require(debtUsd >= dustUsd, "debtTooSmall");
             liabilitiesUsd += debtUsd;
         }
 
         // check if assets are greater than liabilities
         require(assetsUsd >= liabilitiesUsd, "insufficientAssets");
-
-        // if first borrow, add to userPools and poolUsers
-        if(poolUsers[pool][caller] == false) {
-            poolUsers[pool][caller] = true;
-            userPools[caller].push(pool);
-        }
 
         // update interest rate model
         if(interestRateModel != IInterestRateModel(address(0))) {
@@ -378,8 +382,10 @@ contract Core {
         Pool pool = Pool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
 
+        uint debt = pool.getDebtOf(caller);
+
         // if user repays all, remove from userPools and poolUsers
-        if(amount == pool.getDebtOf(caller)) {
+        if(amount == debt) {
             for (uint i = 0; i < userPools[caller].length; i++) {
                 if(userPools[caller][i] == pool) {
                     userPools[caller][i] = userPools[caller][userPools[caller].length - 1];
@@ -388,6 +394,11 @@ contract Core {
                 }
             }
             poolUsers[pool][caller] = false;
+        } else {
+            uint afterRepay = debt - amount;
+            uint price = oracle.getDebtPriceMantissa(address(pool));
+            uint afterRepayUsd = afterRepay * price / MANTISSA;
+            require(afterRepayUsd >= dustUsd, "debtTooSmall");
         }
 
         // update interest rate model
@@ -415,6 +426,7 @@ contract Core {
         require(collateralUsers[collateral][borrower], "notCollateralUser");
         require(poolUsers[pool][borrower], "notPoolUser");
         require(debtAmount > 0, "zeroDebtAmount");
+        if(debtAmount == type(uint256).max) debtAmount = pool.getDebtOf(borrower);
         uint weekLow = getSupplyValueWeeklyLow();
         {
             uint liabilitiesUsd;
@@ -479,6 +491,7 @@ contract Core {
         uint collateralIncentive = collateralAmount * liquidationIncentiveBps / 10000;
         uint collateralIncentiveUsd = collateralIncentive * collateralPrice / MANTISSA;
         uint collateralReward = collateralAmount + collateralIncentive;
+        
         // enforce max liquidation incentive
         require(collateralIncentiveUsd <= maxLiquidationIncentiveUsd, "maxLiquidationIncentiveExceeded");
 
