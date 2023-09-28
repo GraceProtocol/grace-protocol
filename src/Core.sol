@@ -15,6 +15,12 @@ interface ICollateralFeeModel {
     function update(address collateral) external;
 }
 
+interface IERC20 {
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns(bool);
+}
+
 contract Core {
 
     struct CollateralConfig {
@@ -32,6 +38,8 @@ contract Core {
     uint public constant MAX_SOFT_CAP = 2000;
     uint public addCollateralDelay = 3 hours;
     uint public addPoolDelay = 3 hours;
+    uint public liquidationIncentiveBps = 1000; // 10%
+    uint public maxLiquidationIncentiveUsd = 10000e18; // $10,000
     address public owner;
     Oracle public immutable oracle = new Oracle();
     IInterestRateModel public interestRateModel;
@@ -56,10 +64,6 @@ contract Core {
         owner = _owner;
     }
 
-    /***
-        Admin methods
-    ***/
-
     modifier onlyOwner() {
         require(msg.sender == owner, "onlyOwner");
         _;
@@ -69,6 +73,8 @@ contract Core {
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
     function setInterestRateModel(IInterestRateModel _interestRateModel) public onlyOwner { interestRateModel = _interestRateModel; }
     function setCollateralFeeModel(ICollateralFeeModel _collateralFeeModel) public onlyOwner { collateralFeeModel = _collateralFeeModel; }
+    function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
+    function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
 
     function deployPool(address underlying, address feed, uint depositCap) public {
         require(msg.sender == owner, "onlyOwner");
@@ -142,10 +148,6 @@ contract Core {
         oracle.setCollateralFeed(address(collateral.token()), feed);
     }
 
-    /***
-        Collateral Hooks
-    ***/
-
     function updateCollateralFeeModel(address collateral) external {
         require(msg.sender == address(this), "onlyCore");
         collateralFeeModel.update(collateral);
@@ -176,8 +178,7 @@ contract Core {
         return lastSemiWeekLow < semiWeekLow && lastSemiWeekLow > 0 ? lastSemiWeekLow : semiWeekLow;
     }
 
-    function getSoftCapUsd(Collateral collateral) internal returns (uint) {
-        uint weekLow = getSupplyValueWeeklyLow();
+    function getSoftCapUsd(Collateral collateral, uint weekLow) internal view returns (uint) {
         return weekLow * collateralsData[collateral].softCapBps / 10000;
     }
 
@@ -185,7 +186,7 @@ contract Core {
         Collateral collateral = Collateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
         // find soft cap in usd terms
-        uint softCapUsd = getSoftCapUsd(collateral);
+        uint softCapUsd = getSoftCapUsd(collateral, getSupplyValueWeeklyLow());
         // get oracle price
         uint price = oracle.getCollateralPriceMantissa(
             address(collateral),
@@ -211,27 +212,9 @@ contract Core {
         return true;
     }
 
-    // TODO: skip assets check if liabilities == 0
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool) {
         Collateral collateral = Collateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
-        // calculate assets
-        uint assetsUsd = 0;
-        for (uint i = 0; i < userCollaterals[caller].length; i++) {
-            Collateral thisCollateral = userCollaterals[caller][i];
-            uint sofCapUsd = getSoftCapUsd(thisCollateral);
-            uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
-            uint price = oracle.getCollateralPriceMantissa(
-                address(thisCollateral),
-                collateralsData[thisCollateral].collateralFactorBps,
-                thisCollateral.getTotalCollateral(),
-                capUsd
-            );
-            uint thisCollateralBalance = collateral.getCollateralOf(caller);
-            if(thisCollateral == collateral) thisCollateralBalance -= amount;
-            uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
-            assetsUsd += thisCollateralUsd;
-        }
 
         // calculate liabilities
         uint liabilitiesUsd = 0;
@@ -241,6 +224,28 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(pool));
             uint debtUsd = debt * price / MANTISSA;
             liabilitiesUsd += debtUsd;
+        }
+
+        // calculate assets
+        uint assetsUsd = 0;
+        // if liabilities == 0, skip assets check to save gas
+        if(liabilitiesUsd > 0) {
+            uint weekLow = getSupplyValueWeeklyLow();
+            for (uint i = 0; i < userCollaterals[caller].length; i++) {
+                Collateral thisCollateral = userCollaterals[caller][i];
+                uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+                uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+                uint price = oracle.getCollateralPriceMantissa(
+                    address(thisCollateral),
+                    collateralsData[thisCollateral].collateralFactorBps,
+                    thisCollateral.getTotalCollateral(),
+                    capUsd
+                );
+                uint thisCollateralBalance = collateral.getCollateralOf(caller);
+                if(thisCollateral == collateral) thisCollateralBalance -= amount;
+                uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
+                assetsUsd += thisCollateralUsd;
+            }
         }
 
         // check if assets are greater than liabilities
@@ -277,10 +282,6 @@ contract Core {
             return (0, address(0));
         }
     }
-
-    /***
-        Pool Hooks
-    ***/
 
     function updateInterestRateModel(address pool) external {
         require(msg.sender == address(this), "onlyCore");
@@ -328,9 +329,10 @@ contract Core {
 
         // calculate assets
         uint assetsUsd = 0;
+        uint weekLow = getSupplyValueWeeklyLow();
         for (uint i = 0; i < userCollaterals[caller].length; i++) {
             Collateral thisCollateral = userCollaterals[caller][i];
-            uint sofCapUsd = getSoftCapUsd(thisCollateral);
+            uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
             uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
             uint price = oracle.getCollateralPriceMantissa(
                 address(thisCollateral),
@@ -407,6 +409,84 @@ contract Core {
         } catch {
             return (0, address(0));
         }
+    }
+
+    function liquidate(address borrower, Pool pool, Collateral collateral, uint debtAmount) external {
+        require(collateralUsers[collateral][borrower], "notCollateralUser");
+        require(poolUsers[pool][borrower], "notPoolUser");
+        require(debtAmount > 0, "zeroDebtAmount");
+        uint weekLow = getSupplyValueWeeklyLow();
+        {
+            uint liabilitiesUsd;
+            {
+                uint poolDebtUsd = pool.getDebtOf(borrower) * oracle.getDebtPriceMantissa(address(pool)) / MANTISSA;
+                // calculate liabilities
+                liabilitiesUsd = poolDebtUsd;
+                for (uint i = 0; i < userPools[borrower].length; i++) {
+                    Pool thisPool = userPools[borrower][i];
+                    if (thisPool != pool) {
+                        uint debt = thisPool.getDebtOf(borrower);
+                        uint price = oracle.getDebtPriceMantissa(address(thisPool));
+                        uint debtUsd = debt * price / MANTISSA;
+                        require(debtUsd <= poolDebtUsd, "notMostDebtPool");
+                        liabilitiesUsd += debtUsd;
+                    }
+                }
+            }
+
+            // calculate assets
+            uint assetsUsd = 0;
+            {
+                // keep track of most valuable collateral
+                uint collateralBalanceUsd = collateral.getCollateralOf(borrower) * oracle.getCollateralPriceMantissa(
+                    address(collateral),
+                    collateralsData[collateral].collateralFactorBps,
+                    collateral.getTotalCollateral(),
+                    collateralsData[collateral].hardCap < getSoftCapUsd(collateral, weekLow) ? collateralsData[collateral].hardCap : getSoftCapUsd(collateral, weekLow)
+                ) / MANTISSA;
+
+                for (uint i = 0; i < userCollaterals[borrower].length; i++) {
+                    Collateral thisCollateral = userCollaterals[borrower][i];
+                    uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+                    uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+                    uint price = oracle.getCollateralPriceMantissa(
+                        address(thisCollateral),
+                        collateralsData[thisCollateral].collateralFactorBps,
+                        thisCollateral.getTotalCollateral(),
+                        capUsd
+                    );
+                    uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
+                    uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
+                    if(thisCollateral != collateral) {
+                        require(thisCollateralUsd <= collateralBalanceUsd, "notMostValuableCollateral");
+                    }
+                    assetsUsd += thisCollateralUsd;
+                }
+            }
+            require(assetsUsd < liabilitiesUsd, "insufficientLiabilities");
+        }
+
+        // calculate collateral reward
+        uint debtPrice = oracle.getDebtPriceMantissa(address(pool));
+        uint debtValue = debtAmount * debtPrice / MANTISSA;
+        uint collateralPrice = oracle.getCollateralPriceMantissa(
+            address(collateral),
+            collateralsData[collateral].collateralFactorBps,
+            collateral.getTotalCollateral(),
+            collateralsData[collateral].hardCap < getSoftCapUsd(collateral, weekLow) ? collateralsData[collateral].hardCap : getSoftCapUsd(collateral, weekLow)
+        );
+        uint collateralAmount = debtValue * MANTISSA / collateralPrice;
+        uint collateralIncentive = collateralAmount * liquidationIncentiveBps / 10000;
+        uint collateralIncentiveUsd = collateralIncentive * collateralPrice / MANTISSA;
+        uint collateralReward = collateralAmount + collateralIncentive;
+        // enforce max liquidation incentive
+        require(collateralIncentiveUsd <= maxLiquidationIncentiveUsd, "maxLiquidationIncentiveExceeded");
+
+        IERC20 debtToken = IERC20(address(pool.token()));
+        debtToken.transferFrom(msg.sender, address(this), debtAmount);
+        debtToken.approve(address(pool), debtAmount);
+        pool.repay(borrower, debtAmount);
+        collateral.seize(borrower, collateralReward, msg.sender);
     }
 
 }

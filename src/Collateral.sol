@@ -94,7 +94,7 @@ contract Collateral {
         return (balance - fee) * sharesOf[account] / sharesSupply;
     }
 
-    function seize(address account, uint256 amount) public {
+    function seize(address account, uint256 amount, address to) public {
         accrueFee();
         require(msg.sender == address(core), "onlyCore");
         require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
@@ -102,7 +102,7 @@ contract Collateral {
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[account] -= shares;
-        token.transfer(msg.sender, amount);
+        token.transfer(to, amount);
     }
 
     function getTotalCollateral() external view returns (uint256) {

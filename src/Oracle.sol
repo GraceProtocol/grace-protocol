@@ -6,7 +6,7 @@ interface IChainlinkFeed {
     function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
 }
 
-interface IERC20 {
+interface IOracleERC20 {
     function decimals() external view returns (uint8);
 }
 
@@ -34,7 +34,7 @@ contract Oracle {
         (,int256 signedPrice,,,) = IChainlinkFeed(feed).latestRoundData();
         uint256 price = signedPrice < 0 ? 0 : uint256(signedPrice);
         uint8 feedDecimals = IChainlinkFeed(feed).decimals();
-        uint8 tokenDecimals = IERC20(token).decimals();
+        uint8 tokenDecimals = IOracleERC20(token).decimals();
         if(feedDecimals + tokenDecimals <= 36) {
             uint8 decimals = 36 - feedDecimals - tokenDecimals;
             normalizedPrice = price * (10 ** decimals);
@@ -59,7 +59,7 @@ contract Oracle {
                     token,
                     feed
                 ),
-                IERC20(token).decimals(),
+                IOracleERC20(token).decimals(),
                 totalCollateral,
                 capUsd
             );
