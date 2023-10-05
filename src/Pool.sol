@@ -115,19 +115,14 @@ contract Pool {
         token.transferFrom(msg.sender, address(this), amount);
     }
 
-    function writeOff(address account, uint amount) public {
+    function writeOff(address account) public {
         accrueInterest();
         require(msg.sender == address(core), "onlyCore");
-        uint debtShares;
-        if(amount == type(uint256).max) {
-            debtShares = debtSharesOf[msg.sender];
-            amount = debtShares * totalDebt / debtSupply;
-        } else {
-            debtShares = amount * debtSupply / totalDebt;
-        }
+        uint debtShares = debtSharesOf[msg.sender];
+        uint debt = debtShares * totalDebt / debtSupply;
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
-        totalDebt -= amount;
+        totalDebt -= debt;
     }
 
     function getAssetsOf(address account) public view returns (uint) {
