@@ -189,17 +189,17 @@ contract BaseCollateralTest is Test {
     //     assertEq(baseCollateral.getCollateralOf(address(this)), 0);
     // }
 
-    function testAccrueFee() public {
-        uint feeBps = 10000;
-        uint amount = 1000;
-        uint MINIMUM_LIQUIDITY = 1000;
-        baseCollateral.deposit(address(this), amount + MINIMUM_LIQUIDITY);
-        assertEq(token.balanceOf(address(baseCollateral)), amount + MINIMUM_LIQUIDITY);
-        mockCore.setCollateralFeeBps(feeBps, address(this));
-        vm.warp(block.timestamp + 365 days);
-        baseCollateral.accrueFee();
-        assertEq(token.balanceOf(address(baseCollateral)), 1000);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 500);
-    }
+    // function testAccrueFee() public {
+    //     uint feeBps = 10000;
+    //     uint amount = 1000;
+    //     uint MINIMUM_LIQUIDITY = 1000;
+    //     baseCollateral.deposit(address(this), amount + MINIMUM_LIQUIDITY);
+    //     assertEq(token.balanceOf(address(baseCollateral)), amount + MINIMUM_LIQUIDITY);
+    //     mockCore.setCollateralFeeBps(feeBps, address(this));
+    //     vm.warp(block.timestamp + 365 days);
+    //     baseCollateral.accrueFee();
+    //     assertEq(token.balanceOf(address(baseCollateral)), 1000);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 500);
+    // }
 
 }

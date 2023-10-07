@@ -19,6 +19,7 @@ contract Collateral {
     ICollateralCore public immutable core;
     uint public sharesSupply;
     uint public lastAccrued;
+    uint public lastBalance;
     mapping (address => uint) public sharesOf;
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
     uint constant MINIMUM_LIQUIDITY = 10**3;
@@ -29,7 +30,7 @@ contract Collateral {
         core = ICollateralCore(msg.sender);
     }
 
-    function accrueFee() public {
+    function accrueFee() internal {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         (uint feeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
@@ -37,7 +38,7 @@ contract Collateral {
             lastAccrued = block.timestamp;
             return;
         }
-        uint balance = token.balanceOf(address(this));
+        uint balance = lastBalance;
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
         if(fee > balance) fee = balance;
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
@@ -55,7 +56,7 @@ contract Collateral {
             shares = amount - MINIMUM_LIQUIDITY;
             sharesSupply = amount;
         } else {
-            shares = amount * sharesSupply / token.balanceOf(address(this));
+            shares = amount * sharesSupply / lastBalance;
             sharesSupply += shares;
         }
         require(shares > 0, "zeroShares");
@@ -63,23 +64,25 @@ contract Collateral {
         uint newShares = sharesBefore + shares;
         require(newShares <= sqrtMaxUint, "overflow");
         sharesOf[recipient] = newShares;
+        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
     }
 
     function withdraw(uint256 amount) public {
         accrueFee();
         require(core.onCollateralWithdraw(msg.sender, amount), "beforeCollateralWithdraw");
-        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
+        require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares;
         if(amount == type(uint256).max) {
             shares = sharesOf[msg.sender];
-            amount = shares * token.balanceOf(address(this)) / sharesSupply;
+            amount = shares * lastBalance / sharesSupply;
         } else {
-            shares = amount * sharesSupply / token.balanceOf(address(this));
+            shares = amount * sharesSupply / lastBalance;
         }
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[msg.sender] -= shares;
+        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
     }
 
@@ -87,7 +90,7 @@ contract Collateral {
         if(sharesSupply == 0) return 0;
         uint256 timeElapsed = block.timestamp - lastAccrued;
         (uint feeBps,) = core.getCollateralFeeBps(address(token));
-        uint balance = token.balanceOf(address(this));
+        uint balance = lastBalance;
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
         if(fee > balance) fee = balance;
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
@@ -97,16 +100,17 @@ contract Collateral {
     function seize(address account, uint256 amount, address to) public {
         accrueFee();
         require(msg.sender == address(core), "onlyCore");
-        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
-        uint shares = amount * sharesSupply / token.balanceOf(address(this));
+        require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
+        uint shares = amount * sharesSupply / lastBalance;
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[account] -= shares;
+        lastBalance = token.balanceOf(address(this));
         token.transfer(to, amount);
     }
 
     function getTotalCollateral() external view returns (uint256) {
-        return token.balanceOf(address(this));
+        return lastBalance;
     }
     
 }

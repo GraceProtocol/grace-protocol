@@ -23,6 +23,7 @@ contract Pool {
     uint public debtSupply;
     uint public totalDebt;
     uint public lastAccrued;
+    uint public lastBalance;
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
@@ -42,7 +43,7 @@ contract Pool {
             shares = amount - MINIMUM_LIQUIDITY;
             totalSupply = amount;
         } else {
-            shares = amount * totalSupply / (token.balanceOf(address(this)) + totalDebt);
+            shares = amount * totalSupply / (lastBalance + totalDebt);
             totalSupply += shares;
         }
         require(shares > 0, "zeroShares");
@@ -50,31 +51,33 @@ contract Pool {
         uint newShares = sharesBefore + shares;
         require(newShares <= sqrtMaxUint, "overflow");
         balanceOf[recipient] = newShares;
+        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
     }
 
     function withdraw(uint256 amount) public {
         require(core.onPoolWithdraw(msg.sender, amount), "beforePoolWithdraw");
-        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
+        require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares;
         if(amount == type(uint256).max) {
             shares = balanceOf[msg.sender];
-            amount = shares * (token.balanceOf(address(this)) + totalDebt) / totalSupply;
+            amount = shares * (lastBalance + totalDebt) / totalSupply;
         } else {
-            shares = amount * totalSupply / (token.balanceOf(address(this)) + totalDebt);
+            shares = amount * totalSupply / (lastBalance + totalDebt);
         }
         require(shares > 0, "zeroShares");
         totalSupply -= shares;
         balanceOf[msg.sender] -= shares;
+        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
     }
 
-    function accrueInterest() public {
+    function accrueInterest() internal {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * borrowRateBps * timeElapsed / 10000 / 365 days;
-        uint shares = interest * totalSupply / (token.balanceOf(address(this)) + totalDebt);
+        uint shares = interest * totalSupply / (lastBalance + totalDebt);
         if(shares == 0) return;
         lastAccrued = block.timestamp;
         totalDebt += interest;
@@ -85,7 +88,7 @@ contract Pool {
     function borrow(uint256 amount) public {
         accrueInterest();
         require(core.onPoolBorrow(msg.sender, amount), "beforePoolBorrow");
-        require(token.balanceOf(address(this)) - amount >= MINIMUM_BALANCE, "minimumBalance");
+        require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint debtShares;
         if(debtSupply == 0) {
             debtShares = amount;
@@ -96,6 +99,7 @@ contract Pool {
         debtSharesOf[msg.sender] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
+        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
     }
 
@@ -112,6 +116,7 @@ contract Pool {
         debtSharesOf[msg.sender] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= amount;
+        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
     }
 
@@ -123,11 +128,12 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
+        lastBalance = token.balanceOf(address(this));
     }
 
     function getAssetsOf(address account) public view returns (uint) {
         if(totalSupply == 0) return 0;
-        return balanceOf[account] * (token.balanceOf(address(this)) + totalDebt) / totalSupply;
+        return balanceOf[account] * (lastBalance + totalDebt) / totalSupply;
     }
 
     function getDebtOf(address account) public view returns (uint) {
@@ -136,12 +142,12 @@ contract Pool {
         if(timeElapsed == 0) return debtSharesOf[account] * totalDebt / debtSupply;
         (uint borrowRateBps,) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * borrowRateBps * timeElapsed / 10000 / 365 days;
-        uint shares = interest * totalSupply / (token.balanceOf(address(this)) + totalDebt);
+        uint shares = interest * totalSupply / (lastBalance + totalDebt);
         if(shares == 0) return debtSharesOf[account] * totalDebt / debtSupply;
         return debtSharesOf[account] * (totalDebt + interest) / (debtSupply + shares);
     }
 
     function getSupplied() external view returns (uint) {
-        return token.balanceOf(address(this)) + totalDebt;
+        return lastBalance + totalDebt;
     }
 }
