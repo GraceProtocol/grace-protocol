@@ -45,6 +45,8 @@ contract Core {
     ICollateralFeeModel public collateralFeeModel;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
+    uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
+    uint constant MAX_COLLATERAL_FACTOR_BPS = 1000000; // 10,000%
     mapping (Collateral => CollateralConfig) public collateralsData;
     mapping (Pool => PoolConfig) public poolsData;
     mapping (address => Pool) public underlyingToPool;
@@ -270,6 +272,7 @@ contract Core {
 
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
         try Core(this).getCollateralFeeModelFeeBps{gas:passedGas}(collateral) returns (uint256 _feeBps) {
+            if(_feeBps > MAX_COLLATERAL_FACTOR_BPS) _feeBps = MAX_COLLATERAL_FACTOR_BPS;
             return (_feeBps, feeDestination);
         } catch {
             return (0, address(0));
@@ -282,10 +285,12 @@ contract Core {
     }
 
     function getInterestRateModelBorrowRate(address pool) external view returns (uint256) {
+        require(msg.sender == address(this), "onlyCore");
         return interestRateModel.getBorrowRateBps(pool);
     }
 
     function getCollateralFeeModelFeeBps(address collateral) external view returns (uint256) {
+        require(msg.sender == address(this), "onlyCore");
         return collateralFeeModel.getCollateralFeeBps(collateral);
     }
 
@@ -406,6 +411,7 @@ contract Core {
         
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
         try Core(this).getInterestRateModelBorrowRate{gas: passedGas}(pool) returns (uint256 _borrowRateBps) {
+            if(_borrowRateBps > MAX_BORROW_RATE_BPS) _borrowRateBps = MAX_BORROW_RATE_BPS;
             return (_borrowRateBps, feeDestination);
         } catch {
             return (0, address(0));

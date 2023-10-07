@@ -6,6 +6,10 @@ interface IPool {
     function totalDebt() external view returns (uint256);
 }
 
+interface ICore {
+    function owner() external view returns (address);
+}
+
 contract InterestRateModel {
 
     struct PoolState {
@@ -57,4 +61,9 @@ contract InterestRateModel {
             poolStates[pool].lastBorrowRateUpdate = block.timestamp;
         }
     }
+
+    function setMinRate(address pool, uint rate) external {
+        require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
+        poolStates[pool].minRate = rate;
+    }   
 }
