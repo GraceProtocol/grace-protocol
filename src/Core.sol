@@ -12,7 +12,7 @@ interface IInterestRateModel {
 
 interface ICollateralFeeModel {
     function getCollateralFeeBps(address collateral) external view returns (uint256);
-    function update(address collateral) external;
+    function update(address collateral, uint collateralPriceMantissa, uint capUsd) external;
 }
 
 interface IERC20 {
@@ -39,6 +39,8 @@ contract Core {
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public dustUsd = 1000e18; // $1000
+    uint lastSupplyValueWeeklyLowValue;
+    uint lastSupplyValueWeeklyLowUpdate;
     address public owner;
     Oracle public immutable oracle = new Oracle();
     IInterestRateModel public interestRateModel;
@@ -141,9 +143,9 @@ contract Core {
         oracle.setCollateralFeed(address(collateral.token()), feed);
     }
 
-    function updateCollateralFeeModel(address collateral) external {
+    function updateCollateralFeeModel(address collateral, uint collateralPriceMantissa, uint capUsd) external {
         require(msg.sender == address(this), "onlyCore");
-        collateralFeeModel.update(collateral);
+        collateralFeeModel.update(collateral, collateralPriceMantissa, capUsd);
     }
 
     function getSupplyValueUsd() internal returns (uint256) {
@@ -158,6 +160,7 @@ contract Core {
     }
 
     function getSupplyValueWeeklyLow() internal returns (uint) {
+        if(lastSupplyValueWeeklyLowUpdate == block.timestamp) return lastSupplyValueWeeklyLowValue;
         // get all pools usd value
         uint currentSupplyValueUsd = getSupplyValueUsd();
         // find weekly low of all pool usd value
@@ -168,7 +171,10 @@ contract Core {
             semiWeekLow = currentSupplyValueUsd;
         }
         uint lastSemiWeekLow = supplyValueSemiWeeklyLowUsd[semiWeek - 1];
-        return lastSemiWeekLow < semiWeekLow && lastSemiWeekLow > 0 ? lastSemiWeekLow : semiWeekLow;
+        uint supplyValueWeeklyLow =  lastSemiWeekLow < semiWeekLow && lastSemiWeekLow > 0 ? lastSemiWeekLow : semiWeekLow;
+        lastSupplyValueWeeklyLowValue = supplyValueWeeklyLow;
+        lastSupplyValueWeeklyLowUpdate = block.timestamp;
+        return supplyValueWeeklyLow;
     }
 
     function getSoftCapUsd(Collateral collateral, uint weekLow) internal view returns (uint) {
@@ -180,12 +186,13 @@ contract Core {
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
         // find soft cap in usd terms
         uint softCapUsd = getSoftCapUsd(collateral, getSupplyValueWeeklyLow());
+        uint capUsd = collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd;
         // get oracle price
         uint price = oracle.getCollateralPriceMantissa(
             address(collateral),
             collateralsData[collateral].collateralFactorBps,
             collateral.getTotalCollateral(),
-            collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd
+            capUsd
             );
         // enforce both caps
         uint totalCollateralAfter = collateral.getTotalCollateral() + amount;
@@ -201,7 +208,7 @@ contract Core {
         // update collateral fee model
         if(collateralFeeModel != ICollateralFeeModel(address(0))) {
             uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral)) {} catch {}
+            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral), price, capUsd) {} catch {}
         }
         return true;
     }
@@ -260,8 +267,17 @@ contract Core {
         
         // update collateral fee model
         if(collateralFeeModel != ICollateralFeeModel(address(0))) {
+            uint weekLow = getSupplyValueWeeklyLow();
+            uint sofCapUsd = getSoftCapUsd(collateral, weekLow);
+            uint capUsd = collateralsData[collateral].hardCap < sofCapUsd ? collateralsData[collateral].hardCap : sofCapUsd;
+            uint price = oracle.getCollateralPriceMantissa(
+                address(collateral),
+                collateralsData[collateral].collateralFactorBps,
+                collateral.getTotalCollateral(),
+                capUsd
+            );
             uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral)) {} catch {}
+            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral), price, capUsd) {} catch {}
         }
         return true;
     }
