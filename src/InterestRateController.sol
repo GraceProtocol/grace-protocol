@@ -42,19 +42,23 @@ contract InterestRateModel {
         uint utilBps;
         uint debt = poolContract.totalDebt();
         if (supplied > 0) utilBps = debt * 10000 / supplied; // else util is already 0
-        uint utilTimeElapsed = block.timestamp - poolStates[pool].lastUtilUpdate;
-        if(utilTimeElapsed > 0 && poolStates[pool].lastUtilUpdate > 0) {
+        uint lastUtilUpdate = poolStates[pool].lastUtilUpdate;
+        uint utilTimeElapsed = block.timestamp - lastUtilUpdate;
+        if(utilTimeElapsed > 0 && lastUtilUpdate > 0) {
             poolStates[pool].utilCumulative += utilBps * utilTimeElapsed;
         }
         poolStates[pool].lastUtilUpdate = block.timestamp;
-        uint rateTimeElapsed = block.timestamp - poolStates[pool].lastBorrowRateUpdate;
+        uint lastBorrowRateUpdate = poolStates[pool].lastBorrowRateUpdate;
+        uint rateTimeElapsed = block.timestamp - lastBorrowRateUpdate;
         if(rateTimeElapsed >= UPDATE_PERIOD) {
-            uint utilCumulative = poolStates[pool].utilCumulative / UPDATE_PERIOD;
+            uint utilCumulative = poolStates[pool].utilCumulative / lastBorrowRateUpdate;
             poolStates[pool].utilCumulative = 0;
             if(utilCumulative >= RATE_KINK_BPS) {
                 poolStates[pool].borrowRate += RATE_STEP_BPS;
             } else if(poolStates[pool].borrowRate > RATE_STEP_BPS) {
-                poolStates[pool].borrowRate = poolStates[pool].borrowRate - RATE_STEP_BPS > poolStates[pool].minRate ? poolStates[pool].borrowRate - RATE_STEP_BPS : poolStates[pool].minRate;
+                uint prevBorrowRate = poolStates[pool].borrowRate;
+                uint minRate = poolStates[pool].minRate;
+                poolStates[pool].borrowRate = prevBorrowRate - RATE_STEP_BPS > minRate ? prevBorrowRate - RATE_STEP_BPS : minRate;
             } else {
                 poolStates[pool].borrowRate = poolStates[pool].minRate;
             }
