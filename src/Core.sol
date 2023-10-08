@@ -529,7 +529,6 @@ contract Core {
         }
     }
 
-    // TODO: update interest rate and collateral fee models
     function writeOff(address borrower) public {
         // calculate liabilities
         uint liabilitiesUsd = 0;
@@ -569,6 +568,11 @@ contract Core {
             Pool thisPool = userPools[borrower][i];
             thisPool.writeOff(borrower);
             poolUsers[thisPool][borrower] = false;
+            // update interest rate model
+            if(interestRateModel != IInterestRateModel(address(0))) {
+                uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+                try Core(this).updateInterestRateModel{gas: passedGas}(address(thisPool)) {} catch {}
+            }
         }
         delete userPools[borrower];
 
@@ -578,6 +582,19 @@ contract Core {
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             thisCollateral.seize(borrower, thisCollateralBalance, feeDestination);
             collateralUsers[thisCollateral][borrower] = false;
+            // update collateral fee model
+            if(collateralFeeModel != ICollateralFeeModel(address(0))) {
+                uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+                uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+                uint price = oracle.getCollateralPriceMantissa(
+                    address(thisCollateral),
+                    collateralsData[thisCollateral].collateralFactorBps,
+                    thisCollateral.getTotalCollateral(),
+                    capUsd
+                );
+                uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+                try Core(this).updateCollateralFeeModel{gas: passedGas}(address(thisCollateral), price, capUsd) {} catch {}
+            }
         }
         delete userCollaterals[borrower];
     }
