@@ -24,6 +24,7 @@ contract Pool {
     uint public totalDebt;
     uint public lastAccrued;
     uint public lastBalance;
+    uint public lastBorrowRate;
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
@@ -76,12 +77,13 @@ contract Pool {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
-        uint256 interest = totalDebt * borrowRateBps * timeElapsed / 10000 / 365 days;
+        uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = interest * totalSupply / (lastBalance + totalDebt);
         if(shares == 0) return;
         lastAccrued = block.timestamp;
         totalDebt += interest;
         debtSupply += shares;
+        lastBorrowRate = borrowRateBps;
         debtSharesOf[borrowRateDestination] += shares;
     }
 
