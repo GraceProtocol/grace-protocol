@@ -374,10 +374,12 @@ contract Grace {
      * @notice Burn caller's tokens
      * @param rawAmount The number of tokens to be burned from the caller's balance
      */
-    function burn(uint rawAmount) external {
+    function burn(uint rawAmount) external returns (bool) {
+        uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
         balances[msg.sender] = sub96(balances[msg.sender], amount, "Grace::burn: burn amount exceeds balance");
         totalSupply = safe96(totalSupply - amount, "Grace::burn: burn amount exceeds totalSupply");
         emit Transfer(msg.sender, address(0), amount);
+        return true;
     }
 
 }
