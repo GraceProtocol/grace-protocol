@@ -12,7 +12,10 @@ contract Grace {
     uint8 public constant decimals = 18;
 
     /// @notice Total number of tokens in circulation
-    uint public constant totalSupply = 1000000000e18; // 1 billion
+    uint public totalSupply;
+
+    /// @notice Address which may mint new tokens
+    address public minter;
 
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -29,6 +32,9 @@ contract Grace {
         uint96 votes;
     }
 
+    /// @notice The EIP-712 typehash for the permit struct used by the contract
+    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
     /// @notice A record of votes checkpoints for each account, by index
     mapping (address => mapping (uint32 => Checkpoint)) public checkpoints;
 
@@ -44,6 +50,9 @@ contract Grace {
     /// @notice A record of states for signing / validating signatures
     mapping (address => uint) public nonces;
 
+    /// @notice An event thats emitted when the minter address is changed
+    event MinterChanged(address minter, address newMinter);
+
     /// @notice An event thats emitted when an account changes its delegate
     event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate);
 
@@ -58,11 +67,21 @@ contract Grace {
 
     /**
      * @notice Construct a new Grace token
-     * @param account The initial account to grant all the tokens
+     * @param minter_ TThe account with minting ability
      */
-    constructor(address account) {
-        balances[account] = uint96(totalSupply);
-        emit Transfer(address(0), account, totalSupply);
+    constructor(address minter_) {
+        minter = minter_;
+        emit MinterChanged(address(0), minter_);
+    }
+
+    /**
+     * @notice Change the minter address
+     * @param minter_ The address of the new minter
+     */
+    function setMinter(address minter_) external {
+        require(msg.sender == minter, "Grace::setMinter: only the minter can change the minter address");
+        emit MinterChanged(minter, minter_);
+        minter = minter_;
     }
 
     /**
@@ -298,4 +317,67 @@ contract Grace {
         assembly { chainId := chainid() }
         return chainId;
     }
+
+    /**
+     * @notice Triggers an approval from owner to spends
+     * @param owner The address to approve from
+     * @param spender The address to be approved
+     * @param rawAmount The number of tokens that are approved (2^256-1 means infinite)
+     * @param deadline The time at which to expire the signature
+     * @param v The recovery byte of the signature
+     * @param r Half of the ECDSA signature pair
+     * @param s Half of the ECDSA signature pair
+     */
+    function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
+        uint96 amount;
+        if (rawAmount == type(uint).max) {
+            amount = type(uint96).max;
+        } else {
+            amount = safe96(rawAmount, "Grace::permit: amount exceeds 96 bits");
+        }
+
+        bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        address signatory = ecrecover(digest, v, r, s);
+        require(signatory != address(0), "Grace::permit: invalid signature");
+        require(signatory == owner, "Grace::permit: unauthorized");
+        require(block.timestamp <= deadline, "Grace::permit: signature expired");
+
+        allowances[owner][spender] = amount;
+
+        emit Approval(owner, spender, amount);
+    }
+
+    /**
+     * @notice Mint new tokens
+     * @param dst The address of the destination account
+     * @param rawAmount The number of tokens to be minted
+     */
+    function mint(address dst, uint rawAmount) external {
+        require(msg.sender == minter, "Grace::mint: only the minter can mint");
+        require(dst != address(0), "Grace::mint: cannot transfer to the zero address");
+
+        // mint the amount
+        uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
+        totalSupply = safe96(totalSupply + amount, "Grace::mint: totalSupply exceeds 96 bits");
+
+        // transfer the amount to the recipient
+        balances[dst] = add96(balances[dst], amount, "Grace::mint: transfer amount overflows");
+        emit Transfer(address(0), dst, amount);
+
+        // move delegates
+        _moveDelegates(address(0), delegates[dst], amount);
+    }
+
+    /**
+     * @notice Burn caller's tokens
+     * @param rawAmount The number of tokens to be burned from the caller's balance
+     */
+    function burn(uint rawAmount) external {
+        balances[msg.sender] = sub96(balances[msg.sender], amount, "Grace::burn: burn amount exceeds balance");
+        totalSupply = safe96(totalSupply - amount, "Grace::burn: burn amount exceeds totalSupply");
+        emit Transfer(msg.sender, address(0), amount);
+    }
+
 }
