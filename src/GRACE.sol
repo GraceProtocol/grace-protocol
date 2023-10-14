@@ -14,8 +14,8 @@ contract Grace {
     /// @notice Total number of tokens in circulation
     uint public totalSupply;
 
-    /// @notice Address which may mint new tokens
-    address public minter;
+    /// @notice Address which may add new minters
+    address public operator;
 
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -50,8 +50,11 @@ contract Grace {
     /// @notice A record of states for signing / validating signatures
     mapping (address => uint) public nonces;
 
-    /// @notice An event thats emitted when the minter address is changed
-    event MinterChanged(address minter, address newMinter);
+    /// @notice A record of whitelisted minters
+    mapping (address => bool) public minters;
+
+    /// @notice An event thats emitted when the operator address is changed
+    event OperatorChanged(address operator, address newOperator);
 
     /// @notice An event thats emitted when an account changes its delegate
     event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate);
@@ -65,23 +68,36 @@ contract Grace {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
+    /// @notice An event thats emitted when a minter is changed
+    event MinterChanged(address indexed minter, bool isMinter);
+
     /**
      * @notice Construct a new Grace token
-     * @param minter_ TThe account with minting ability
+     * @param _operator TThe account with minting ability
      */
-    constructor(address minter_) {
-        minter = minter_;
-        emit MinterChanged(address(0), minter_);
+    constructor(address _operator) {
+        operator = _operator;
+        emit OperatorChanged(address(0), _operator);
     }
 
     /**
      * @notice Change the minter address
      * @param minter_ The address of the new minter
      */
-    function setMinter(address minter_) external {
-        require(msg.sender == minter, "Grace::setMinter: only the minter can change the minter address");
-        emit MinterChanged(minter, minter_);
-        minter = minter_;
+    function setMinter(address minter_, bool isMinter) external {
+        require(msg.sender == operator, "Grace::setMinter: only the operator can set minters");
+        minters[minter_] = isMinter;
+        emit MinterChanged(minter_, isMinter);
+    }
+
+    /**
+     * @notice Change the operator address
+     * @param operator_ The address of the new operator
+     */
+    function setOperator(address operator_) external {
+        require(msg.sender == operator, "Grace::setOperator: only the operator can change the operator address");
+        operator = operator_;
+        emit OperatorChanged(operator, operator_);
     }
 
     /**
@@ -355,7 +371,7 @@ contract Grace {
      * @param rawAmount The number of tokens to be minted
      */
     function mint(address dst, uint rawAmount) external {
-        require(msg.sender == minter, "Grace::mint: only the minter can mint");
+        require(minters[msg.sender], "Grace::mint: only a whitelisted minter can mint");
         require(dst != address(0), "Grace::mint: cannot transfer to the zero address");
 
         // mint the amount
