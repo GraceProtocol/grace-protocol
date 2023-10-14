@@ -13,12 +13,15 @@ contract Reserve {
 
     IERC20 public immutable grace;
     uint constant MANTISSA = 1e18;
+    uint locked = 1; // 1 = unlocked, 2 = locked
 
     constructor(IERC20 _grace) {
         grace = _grace;
     }
 
     function redeem(uint256 amount, IERC20[] memory tokens) external {
+        require(locked == 1, "locked");
+        locked = 2;
         grace.transferFrom(msg.sender, address(this), amount);
         uint totalSupply = grace.totalSupply();
         grace.burn(amount);
@@ -32,5 +35,6 @@ contract Reserve {
             uint share = balance * shareMantissa / MANTISSA;
             tokens[i].transfer(msg.sender, share);
         }
+        locked = 1;
     }
 }
