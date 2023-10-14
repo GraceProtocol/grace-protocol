@@ -22,6 +22,7 @@ contract Reserve {
     function redeem(uint256 amount, IERC20[] memory tokens) external {
         require(locked == 1, "locked");
         locked = 2;
+        if(amount == type(uint256).max) amount = grace.balanceOf(msg.sender);
         grace.transferFrom(msg.sender, address(this), amount);
         uint totalSupply = grace.totalSupply();
         grace.burn(amount);
@@ -37,4 +38,5 @@ contract Reserve {
         }
         locked = 1;
     }
+
 }
