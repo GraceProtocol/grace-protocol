@@ -74,5 +74,6 @@ contract CollateralFeeController {
     function setMinFee(address collateral, uint fee) external {
         require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
         collateralStates[collateral].minFee = fee;
+        if(collateralStates[collateral].fee < fee) collateralStates[collateral].fee = fee;
     }   
 }

@@ -72,5 +72,6 @@ contract InterestRateModel {
     function setMinRate(address pool, uint rate) external {
         require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
         poolStates[pool].minRate = rate;
+        if(poolStates[pool].borrowRate < rate) poolStates[pool].borrowRate = rate;
     }   
 }
