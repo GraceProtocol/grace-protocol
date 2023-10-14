@@ -162,4 +162,10 @@ contract Pool {
     function getSupplied() external view returns (uint) {
         return lastBalance + totalDebt;
     }
+
+    function pull(address _stuckToken, address dst, uint amount) external {
+        require(msg.sender == address(core), "onlyCore");
+        require(_stuckToken != address(token), "cannotPullUnderlying");
+        IPoolUnderlying(_stuckToken).transfer(dst, amount);
+    }
 }

@@ -126,5 +126,11 @@ contract Collateral {
     function getTotalCollateral() external view returns (uint256) {
         return lastBalance;
     }
+
+    function pull(address _stuckToken, address dst, uint amount) external {
+        require(msg.sender == address(core), "onlyCore");
+        require(_stuckToken != address(token), "cannotPullUnderlying");
+        ICollateralUnderlying(_stuckToken).transfer(dst, amount);
+    }
     
 }

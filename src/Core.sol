@@ -563,8 +563,16 @@ contract Core {
         delete userCollaterals[borrower];
     }
 
-    function pull(IERC20 token, uint amount) public onlyOwner {
-        token.transfer(owner, amount);
+    function pullFromCore(IERC20 token, address dst, uint amount) public onlyOwner {
+        token.transfer(dst, amount);
+    }
+
+    function pullFromPool(Pool pool, address token, address dst, uint amount) public onlyOwner {
+        pool.pull(token, dst, amount);
+    }
+
+    function pullFromCollateral(Collateral collateral, address token, address dst, uint amount) public onlyOwner {
+        collateral.pull(token, dst, amount);
     }
 
 }

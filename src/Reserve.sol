@@ -19,9 +19,11 @@ contract Reserve {
         grace = _grace;
     }
 
-    function redeem(uint256 amount, IERC20[] memory tokens) external {
+    function rageQuit(uint256 amount, IERC20[] memory tokens) external {
         require(locked == 1, "locked");
         locked = 2;
+        uint256 dayOfQuarter = (block.timestamp / 1 days) % 90;
+        require(dayOfQuarter == 1, "Function can only be called on the first day of each quarter");
         if(amount == type(uint256).max) amount = grace.balanceOf(msg.sender);
         grace.transferFrom(msg.sender, address(this), amount);
         uint totalSupply = grace.totalSupply();
