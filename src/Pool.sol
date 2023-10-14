@@ -7,6 +7,7 @@ interface IPoolCore {
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, address to, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool) external view returns (uint256, address);
+    function updateInterestRateModel() external;
 }
 
 interface IPoolUnderlying {
@@ -74,6 +75,8 @@ contract Pool {
     }
 
     function accrueInterest() internal {
+        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+        try IPoolCore(core).updateInterestRateModel{gas: passedGas}() {} catch {}
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));

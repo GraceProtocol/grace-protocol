@@ -5,6 +5,7 @@ interface ICollateralCore {
     function onCollateralDeposit(address caller, address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
     function getCollateralFeeBps(address collateral) external view returns (uint256, address);
+    function updateCollateralFeeModel() external;
 }
 
 interface ICollateralUnderlying {
@@ -20,6 +21,7 @@ contract Collateral {
     uint public sharesSupply;
     uint public lastAccrued;
     uint public lastBalance;
+    uint public lastFeeBps;
     mapping (address => uint) public sharesOf;
     uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
     uint constant MINIMUM_LIQUIDITY = 10**3;
@@ -31,9 +33,13 @@ contract Collateral {
     }
 
     function accrueFee() internal {
+        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+        try ICollateralCore(core).updateCollateralFeeModel{gas: passedGas}() {} catch {}
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
-        (uint feeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
+        (uint currentFeeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
+        uint feeBps = lastFeeBps;
+        lastFeeBps = currentFeeBps;
         if(feeBps == 0) {
             lastAccrued = block.timestamp;
             return;

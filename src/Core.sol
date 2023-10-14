@@ -143,9 +143,19 @@ contract Core {
         oracle.setCollateralFeed(address(collateral.token()), feed);
     }
 
-    function updateCollateralFeeModel(address collateral, uint collateralPriceMantissa, uint capUsd) external {
-        require(msg.sender == address(this), "onlyCore");
-        collateralFeeModel.update(collateral, collateralPriceMantissa, capUsd);
+    function updateCollateralFeeModel() external {
+        Collateral collateral = Collateral(msg.sender);
+        require(collateralsData[collateral].enabled, "onlyCollaterals");
+        uint weekLow = getSupplyValueWeeklyLow();
+        uint sofCapUsd = getSoftCapUsd(collateral, weekLow);
+        uint capUsd = collateralsData[collateral].hardCap < sofCapUsd ? collateralsData[collateral].hardCap : sofCapUsd;
+        uint price = oracle.getCollateralPriceMantissa(
+            address(collateral),
+            collateralsData[collateral].collateralFactorBps,
+            collateral.getTotalCollateral(),
+            capUsd
+        );
+        collateralFeeModel.update(address(collateral), price, capUsd);
     }
 
     function getSupplyValueUsd() internal returns (uint256) {
@@ -204,12 +214,6 @@ contract Core {
             collateralUsers[collateral][recipient] = true;
             userCollaterals[recipient].push(collateral);
         }
-        
-        // update collateral fee model
-        if(collateralFeeModel != ICollateralFeeModel(address(0))) {
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral), price, capUsd) {} catch {}
-        }
         return true;
     }
 
@@ -264,21 +268,6 @@ contract Core {
             }
             collateralUsers[collateral][caller] = false;
         }
-        
-        // update collateral fee model
-        if(collateralFeeModel != ICollateralFeeModel(address(0))) {
-            uint weekLow = getSupplyValueWeeklyLow();
-            uint sofCapUsd = getSoftCapUsd(collateral, weekLow);
-            uint capUsd = collateralsData[collateral].hardCap < sofCapUsd ? collateralsData[collateral].hardCap : sofCapUsd;
-            uint price = oracle.getCollateralPriceMantissa(
-                address(collateral),
-                collateralsData[collateral].collateralFactorBps,
-                collateral.getTotalCollateral(),
-                capUsd
-            );
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateCollateralFeeModel{gas: passedGas}(address(collateral), price, capUsd) {} catch {}
-        }
         return true;
     }
 
@@ -295,9 +284,10 @@ contract Core {
         }
     }
 
-    function updateInterestRateModel(address pool) external {
-        require(msg.sender == address(this), "onlyCore");
-        interestRateModel.update(pool);
+    function updateInterestRateModel() external {
+        Pool pool = Pool(msg.sender);
+        require(poolsData[pool].enabled, "onlyPools");
+        interestRateModel.update(address(pool));
     }
 
     function getInterestRateModelBorrowRate(address pool) external view returns (uint256) {
@@ -314,26 +304,10 @@ contract Core {
         Pool pool = Pool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         require(pool.getSupplied() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
-
-        // update interest rate model
-        if(interestRateModel != IInterestRateModel(address(0))) {
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateInterestRateModel{gas: passedGas}(address(pool)) {} catch {}
-        }
-
         return true;
     }
 
     function onPoolWithdraw(address, uint256) external returns (bool) {
-        Pool pool = Pool(msg.sender);
-        require(poolsData[pool].enabled, "notPool");
-
-        // update interest rate model
-        if(interestRateModel != IInterestRateModel(address(0))) {
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateInterestRateModel{gas: passedGas}(address(pool)) {} catch {}
-        }   
-
         return true;
     }
 
@@ -380,12 +354,6 @@ contract Core {
         // check if assets are greater than liabilities
         require(assetsUsd >= liabilitiesUsd, "insufficientAssets");
 
-        // update interest rate model
-        if(interestRateModel != IInterestRateModel(address(0))) {
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateInterestRateModel{gas: passedGas}(address(pool)) {} catch {}
-        }
-
         return true;
     }
 
@@ -410,12 +378,6 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(pool));
             uint afterRepayUsd = afterRepay * price / MANTISSA;
             require(afterRepayUsd >= dustUsd, "debtTooSmall");
-        }
-
-        // update interest rate model
-        if(interestRateModel != IInterestRateModel(address(0))) {
-            uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-            try Core(this).updateInterestRateModel{gas: passedGas}(address(pool)) {} catch {}
         }
 
         return true;
@@ -568,11 +530,6 @@ contract Core {
             Pool thisPool = userPools[borrower][i];
             thisPool.writeOff(borrower);
             poolUsers[thisPool][borrower] = false;
-            // update interest rate model
-            if(interestRateModel != IInterestRateModel(address(0))) {
-                uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-                try Core(this).updateInterestRateModel{gas: passedGas}(address(thisPool)) {} catch {}
-            }
         }
         delete userPools[borrower];
 
@@ -582,19 +539,6 @@ contract Core {
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             thisCollateral.seize(borrower, thisCollateralBalance, feeDestination);
             collateralUsers[thisCollateral][borrower] = false;
-            // update collateral fee model
-            if(collateralFeeModel != ICollateralFeeModel(address(0))) {
-                uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
-                uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
-                uint price = oracle.getCollateralPriceMantissa(
-                    address(thisCollateral),
-                    collateralsData[thisCollateral].collateralFactorBps,
-                    thisCollateral.getTotalCollateral(),
-                    capUsd
-                );
-                uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-                try Core(this).updateCollateralFeeModel{gas: passedGas}(address(thisCollateral), price, capUsd) {} catch {}
-            }
         }
         delete userCollaterals[borrower];
     }
