@@ -575,4 +575,10 @@ contract Core {
         collateral.pull(token, dst, amount);
     }
 
+    /// @notice Reset the lock counter in case of emergency
+    function resetLock() public {
+        require(msg.sender == tx.origin, "onlyExternals");
+        lockDepth = 0;
+    }
+
 }
