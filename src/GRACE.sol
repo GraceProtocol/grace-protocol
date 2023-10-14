@@ -17,6 +17,12 @@ contract Grace {
     /// @notice Address which may add new minters
     address public operator;
 
+    /// @notice Whether the token can be transferred, or not.
+    bool public transferable;
+
+    /// @notice Record of addresses excempt from transfer restrictions
+    mapping (address => bool) public transferWhitelist;
+
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
 
@@ -78,6 +84,24 @@ contract Grace {
     constructor(address _operator) {
         operator = _operator;
         emit OperatorChanged(address(0), _operator);
+    }
+
+    /**
+     * @notice Allow transfers
+     */
+    function openTheGates() external {
+        require(msg.sender == operator, "Grace::openTheGates: only the operator can allow transfers");
+        transferable = true;
+    }
+
+    /**
+     * @notice Add or remove an address to/from the transfer whitelist
+     * @param account The address to add
+     * @param isWhitelisted Whether or not the address should be whitelisted
+     */
+    function setTransferWhitelist(address account, bool isWhitelisted) external {
+        require(msg.sender == operator, "Grace::setTransferWhitelist: only the operator can set the transfer whitelist");
+        transferWhitelist[account] = isWhitelisted;
     }
 
     /**
@@ -268,7 +292,9 @@ contract Grace {
     function _transferTokens(address src, address dst, uint96 amount) internal {
         require(src != address(0), "Grace::_transferTokens: cannot transfer from the zero address");
         require(dst != address(0), "Grace::_transferTokens: cannot transfer to the zero address");
-
+        if (!transferable) {
+            require(transferWhitelist[src], "Grace::transfer: transfers are disabled");
+        }
         balances[src] = sub96(balances[src], amount, "Grace::_transferTokens: transfer amount exceeds balance");
         balances[dst] = add96(balances[dst], amount, "Grace::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);
