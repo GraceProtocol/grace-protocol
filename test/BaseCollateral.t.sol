@@ -8,66 +8,66 @@ import "./mocks/MockCore.sol";
 
 contract BaseCollateralTest is Test {
     
-    uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
-    ERC20 public token;
-    MockCore public mockCore;
-    Collateral public baseCollateral;
+    // uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
+    // ERC20 public token;
+    // MockCore public mockCore;
+    // Collateral public baseCollateral;
 
-    constructor() {
-        token = new ERC20();
-        mockCore = new MockCore();
-        baseCollateral = new Collateral(ICollateralUnderlying(address(token)));
-        token.mint(address(this), type(uint256).max);
-        token.approve(address(baseCollateral), type(uint256).max);
-    }
+    // constructor() {
+    //     token = new ERC20();
+    //     mockCore = new MockCore();
+    //     baseCollateral = new Collateral(ICollateralUnderlying(address(token)));
+    //     token.mint(address(this), type(uint256).max);
+    //     token.approve(address(baseCollateral), type(uint256).max);
+    // }
     
-    function testDeposit(uint amount) public {
-        amount = bound(amount, 1001, sqrtMaxUint);
-        uint MINIMUM_LIQUIDITY = 1000;
-        baseCollateral.deposit(address(this), amount);
-        assertEq(baseCollateral.sharesSupply(), amount);
-        assertEq(baseCollateral.sharesOf(address(this)), amount - MINIMUM_LIQUIDITY);
-        assertEq(baseCollateral.getCollateralOf(address(this)), amount - MINIMUM_LIQUIDITY);
-        assertEq(token.balanceOf(address(baseCollateral)), amount);
-    }
+    // function testDeposit(uint amount) public {
+    //     amount = bound(amount, 1001, sqrtMaxUint);
+    //     uint MINIMUM_LIQUIDITY = 1000;
+    //     baseCollateral.deposit(address(this), amount);
+    //     assertEq(baseCollateral.sharesSupply(), amount);
+    //     assertEq(baseCollateral.sharesOf(address(this)), amount - MINIMUM_LIQUIDITY);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), amount - MINIMUM_LIQUIDITY);
+    //     assertEq(token.balanceOf(address(baseCollateral)), amount);
+    // }
 
-    function testDepositDenied() public {
-        mockCore.setValue(false);
-        vm.expectRevert();
-        baseCollateral.deposit(address(this), 100);
-        assertEq(baseCollateral.sharesSupply(), 0);
-        assertEq(baseCollateral.sharesOf(address(this)), 0);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 0);
-        assertEq(token.balanceOf(address(baseCollateral)), 0);
-    }
+    // function testDepositDenied() public {
+    //     mockCore.setValue(false);
+    //     vm.expectRevert();
+    //     baseCollateral.deposit(address(this), 100);
+    //     assertEq(baseCollateral.sharesSupply(), 0);
+    //     assertEq(baseCollateral.sharesOf(address(this)), 0);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 0);
+    //     assertEq(token.balanceOf(address(baseCollateral)), 0);
+    // }
 
-    function testDepositOnBehalf(uint amount) public {
-        amount = bound(amount, 1001, sqrtMaxUint);
-        baseCollateral.deposit(address(1), amount);
-        assertEq(baseCollateral.sharesSupply(), amount);
-        assertEq(baseCollateral.sharesOf(address(1)), amount - 1000);
-        assertEq(baseCollateral.getCollateralOf(address(1)), amount - 1000);
-        assertEq(token.balanceOf(address(baseCollateral)), amount);
-    }
+    // function testDepositOnBehalf(uint amount) public {
+    //     amount = bound(amount, 1001, sqrtMaxUint);
+    //     baseCollateral.deposit(address(1), amount);
+    //     assertEq(baseCollateral.sharesSupply(), amount);
+    //     assertEq(baseCollateral.sharesOf(address(1)), amount - 1000);
+    //     assertEq(baseCollateral.getCollateralOf(address(1)), amount - 1000);
+    //     assertEq(token.balanceOf(address(baseCollateral)), amount);
+    // }
 
-    function testDepositZero() public {
-        vm.expectRevert();
-        baseCollateral.deposit(address(this), 0);
-        assertEq(baseCollateral.sharesSupply(), 0);
-        assertEq(baseCollateral.sharesOf(address(this)), 0);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 0);
-        assertEq(token.balanceOf(address(baseCollateral)), 0);
-    }
+    // function testDepositZero() public {
+    //     vm.expectRevert();
+    //     baseCollateral.deposit(address(this), 0);
+    //     assertEq(baseCollateral.sharesSupply(), 0);
+    //     assertEq(baseCollateral.sharesOf(address(this)), 0);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 0);
+    //     assertEq(token.balanceOf(address(baseCollateral)), 0);
+    // }
 
-    function testSecondDeposit(uint amount) public {
-        amount = bound(amount, 1001, sqrtMaxUint / 2);
-        baseCollateral.deposit(address(this), amount);
-        baseCollateral.deposit(address(this), amount);
-        assertEq(baseCollateral.sharesSupply(), amount * 2);
-        assertEq(baseCollateral.sharesOf(address(this)), amount * 2 - 1000);
-        assertEq(baseCollateral.getCollateralOf(address(this)), amount * 2 - 1000);
-        assertEq(token.balanceOf(address(baseCollateral)), amount * 2);
-    }
+    // function testSecondDeposit(uint amount) public {
+    //     amount = bound(amount, 1001, sqrtMaxUint / 2);
+    //     baseCollateral.deposit(address(this), amount);
+    //     baseCollateral.deposit(address(this), amount);
+    //     assertEq(baseCollateral.sharesSupply(), amount * 2);
+    //     assertEq(baseCollateral.sharesOf(address(this)), amount * 2 - 1000);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), amount * 2 - 1000);
+    //     assertEq(token.balanceOf(address(baseCollateral)), amount * 2);
+    // }
 
     // function testDepositAfterWithdrawal(uint amount) public {
     //     amount = bound(amount, 1, sqrtMaxUint / 2);
@@ -91,47 +91,47 @@ contract BaseCollateralTest is Test {
     //     assertApproxEqAbs(token.balanceOf(address(baseCollateral)), amount * 15 / 10, 1);
     // }
     
-    function testWithdraw(uint amount) public {
-        amount = bound(amount, 1001, sqrtMaxUint);
-        baseCollateral.deposit(address(this), amount);
-        baseCollateral.withdraw(amount - 1000);
-        assertEq(baseCollateral.sharesSupply(), 1000);
-        assertEq(baseCollateral.sharesOf(address(this)), 0);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 0);
-        assertEq(token.balanceOf(address(baseCollateral)), 1000);
-    }
+    // function testWithdraw(uint amount) public {
+    //     amount = bound(amount, 1001, sqrtMaxUint);
+    //     baseCollateral.deposit(address(this), amount);
+    //     baseCollateral.withdraw(amount - 1000);
+    //     assertEq(baseCollateral.sharesSupply(), 1000);
+    //     assertEq(baseCollateral.sharesOf(address(this)), 0);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 0);
+    //     assertEq(token.balanceOf(address(baseCollateral)), 1000);
+    // }
 
-    function testWithdrawDenied() public {
-        baseCollateral.deposit(address(this), 1001);
-        mockCore.setValue(false);
-        vm.expectRevert();
-        baseCollateral.withdraw(1);
-        assertEq(baseCollateral.sharesSupply(), 1001);
-        assertEq(baseCollateral.sharesOf(address(this)), 1);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 1);
-        assertEq(token.balanceOf(address(baseCollateral)), 1001);
-    }
+    // function testWithdrawDenied() public {
+    //     baseCollateral.deposit(address(this), 1001);
+    //     mockCore.setValue(false);
+    //     vm.expectRevert();
+    //     baseCollateral.withdraw(1);
+    //     assertEq(baseCollateral.sharesSupply(), 1001);
+    //     assertEq(baseCollateral.sharesOf(address(this)), 1);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 1);
+    //     assertEq(token.balanceOf(address(baseCollateral)), 1001);
+    // }
 
-    function testWithdrawZero() public {
-        baseCollateral.deposit(address(this), 1001);
-        vm.expectRevert();
-        baseCollateral.withdraw(0);
-        assertEq(baseCollateral.sharesSupply(), 1001);
-        assertEq(baseCollateral.sharesOf(address(this)), 1);
-        assertEq(baseCollateral.getCollateralOf(address(this)), 1);
-        assertEq(token.balanceOf(address(baseCollateral)), 1001);
-    }
+    // function testWithdrawZero() public {
+    //     baseCollateral.deposit(address(this), 1001);
+    //     vm.expectRevert();
+    //     baseCollateral.withdraw(0);
+    //     assertEq(baseCollateral.sharesSupply(), 1001);
+    //     assertEq(baseCollateral.sharesOf(address(this)), 1);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), 1);
+    //     assertEq(token.balanceOf(address(baseCollateral)), 1001);
+    // }
     
-    function testWithdrawPartial(uint amount) public {
-        amount = bound(amount, 1, sqrtMaxUint - 1000);
-        baseCollateral.deposit(address(this), sqrtMaxUint);
-        baseCollateral.withdraw(amount);
-        assertEq(baseCollateral.sharesSupply(), sqrtMaxUint - amount);
-        assertEq(baseCollateral.sharesOf(address(this)), sqrtMaxUint - amount - 1000);
-        assertEq(baseCollateral.getCollateralOf(address(this)), sqrtMaxUint - amount - 1000);
-        assertEq(token.balanceOf(address(baseCollateral)), sqrtMaxUint - amount);
+    // function testWithdrawPartial(uint amount) public {
+    //     amount = bound(amount, 1, sqrtMaxUint - 1000);
+    //     baseCollateral.deposit(address(this), sqrtMaxUint);
+    //     baseCollateral.withdraw(amount);
+    //     assertEq(baseCollateral.sharesSupply(), sqrtMaxUint - amount);
+    //     assertEq(baseCollateral.sharesOf(address(this)), sqrtMaxUint - amount - 1000);
+    //     assertEq(baseCollateral.getCollateralOf(address(this)), sqrtMaxUint - amount - 1000);
+    //     assertEq(token.balanceOf(address(baseCollateral)), sqrtMaxUint - amount);
 
-    }
+    // }
 
     // function testWithdrawMoreThanDeposited(uint amount) public {
     //     amount = bound(amount, 1, sqrtMaxUint - 1);

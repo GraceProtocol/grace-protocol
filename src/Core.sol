@@ -41,6 +41,7 @@ contract Core {
     uint public dustUsd = 1000e18; // $1000
     uint lastSupplyValueWeeklyLowValue;
     uint lastSupplyValueWeeklyLowUpdate;
+    uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
     IInterestRateModel public interestRateModel;
@@ -76,6 +77,26 @@ contract Core {
     function setCollateralFeeModel(ICollateralFeeModel _collateralFeeModel) public onlyOwner { collateralFeeModel = _collateralFeeModel; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
+
+    function globalLock(address caller) external {
+        require(collateralsData[Collateral(msg.sender)].enabled || poolsData[Pool(msg.sender)].enabled, "onlyCollateralsOrPools");
+        // exempt core from lock enforcement
+        require(lockDepth == 0 || caller == address(this), "locked");
+        lockDepth += 1;
+    }
+
+    function globalUnlock() external {
+        require(collateralsData[Collateral(msg.sender)].enabled || poolsData[Pool(msg.sender)].enabled, "onlyCollateralsOrPools");
+        lockDepth -= 1;
+    }
+
+    modifier lock() {
+        // exempt trusted contracts from lock enforcement
+        require(lockDepth == 0 || collateralsData[Collateral(msg.sender)].enabled || poolsData[Pool(msg.sender)].enabled, "locked");
+        lockDepth += 1;
+        _;
+        lockDepth -= 1;
+    }
 
     function deployPool(address underlying, address feed, uint depositCap) public {
         require(msg.sender == owner, "onlyOwner");
@@ -396,8 +417,7 @@ contract Core {
         }
     }
 
-    // TODO: update interest rate and collateral fee models
-    function liquidate(address borrower, Pool pool, Collateral collateral, uint debtAmount) external {
+    function liquidate(address borrower, Pool pool, Collateral collateral, uint debtAmount) lock external {
         require(collateralUsers[collateral][borrower], "notCollateralUser");
         require(poolUsers[pool][borrower], "notPoolUser");
         require(debtAmount > 0, "zeroDebtAmount");
@@ -491,7 +511,7 @@ contract Core {
         }
     }
 
-    function writeOff(address borrower) public {
+    function writeOff(address borrower) public lock {
         // calculate liabilities
         uint liabilitiesUsd = 0;
         for (uint i = 0; i < userPools[borrower].length; i++) {

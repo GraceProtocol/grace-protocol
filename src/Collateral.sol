@@ -6,6 +6,8 @@ interface ICollateralCore {
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
     function getCollateralFeeBps(address collateral) external view returns (uint256, address);
     function updateCollateralFeeModel() external;
+    function globalLock(address caller) external;
+    function globalUnlock() external;
 }
 
 interface ICollateralUnderlying {
@@ -32,6 +34,12 @@ contract Collateral {
         core = ICollateralCore(msg.sender);
     }
 
+    modifier lock {
+        core.globalLock(msg.sender);
+        _;
+        core.globalUnlock();
+    }
+
     function accrueFee() internal {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
@@ -53,7 +61,7 @@ contract Collateral {
         token.transfer(feeDestination, fee);
     }
 
-    function deposit(address recipient, uint256 amount) public {
+    function deposit(address recipient, uint256 amount) public lock {
         accrueFee();
         require(core.onCollateralDeposit(msg.sender, recipient, amount), "beforeCollateralDeposit");
         uint shares;
@@ -74,7 +82,7 @@ contract Collateral {
         lastBalance = token.balanceOf(address(this));
     }
 
-    function withdraw(uint256 amount) public {
+    function withdraw(uint256 amount) public lock {
         accrueFee();
         require(core.onCollateralWithdraw(msg.sender, amount), "beforeCollateralWithdraw");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
@@ -103,7 +111,7 @@ contract Collateral {
         return (balance - fee) * sharesOf[account] / sharesSupply;
     }
 
-    function seize(address account, uint256 amount, address to) public {
+    function seize(address account, uint256 amount, address to) public lock {
         accrueFee();
         require(msg.sender == address(core), "onlyCore");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");

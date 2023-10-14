@@ -8,6 +8,8 @@ interface IPoolCore {
     function onPoolRepay(address caller, address to, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool) external view returns (uint256, address);
     function updateInterestRateModel() external;
+    function globalLock(address caller) external;
+    function globalUnlock() external;
 }
 
 interface IPoolUnderlying {
@@ -37,7 +39,13 @@ contract Pool {
         core = IPoolCore(msg.sender);
     }
 
-    function deposit(address recipient, uint256 amount) public {
+    modifier lock {
+        core.globalLock(msg.sender);
+        _;
+        core.globalUnlock();
+    }
+
+    function deposit(address recipient, uint256 amount) public lock {
         require(core.onPoolDeposit(msg.sender, recipient, amount), "beforePoolDeposit");
         uint shares;
         if(totalSupply == 0) {
@@ -57,7 +65,7 @@ contract Pool {
         lastBalance = token.balanceOf(address(this));
     }
 
-    function withdraw(uint256 amount) public {
+    function withdraw(uint256 amount) public lock {
         require(core.onPoolWithdraw(msg.sender, amount), "beforePoolWithdraw");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares;
@@ -90,7 +98,7 @@ contract Pool {
         debtSharesOf[borrowRateDestination] += shares;
     }
 
-    function borrow(uint256 amount) public {
+    function borrow(uint256 amount) public lock {
         accrueInterest();
         require(core.onPoolBorrow(msg.sender, amount), "beforePoolBorrow");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
@@ -108,7 +116,7 @@ contract Pool {
         lastBalance = token.balanceOf(address(this));
     }
 
-    function repay(address to, uint amount) public {
+    function repay(address to, uint amount) public lock {
         accrueInterest();
         require(core.onPoolRepay(msg.sender, to, amount), "beforePoolRepay");
         uint debtShares;
@@ -125,7 +133,7 @@ contract Pool {
         lastBalance = token.balanceOf(address(this));
     }
 
-    function writeOff(address account) public {
+    function writeOff(address account) public lock {
         accrueInterest();
         require(msg.sender == address(core), "onlyCore");
         uint debtShares = debtSharesOf[msg.sender];
