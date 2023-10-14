@@ -33,10 +33,10 @@ contract Collateral {
     }
 
     function accrueFee() internal {
-        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try ICollateralCore(core).updateCollateralFeeModel{gas: passedGas}() {} catch {}
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
+        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+        try ICollateralCore(core).updateCollateralFeeModel{gas: passedGas}() {} catch {}
         (uint currentFeeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
         uint feeBps = lastFeeBps;
         lastFeeBps = currentFeeBps;

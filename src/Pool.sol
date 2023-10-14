@@ -75,10 +75,10 @@ contract Pool {
     }
 
     function accrueInterest() internal {
-        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try IPoolCore(core).updateInterestRateModel{gas: passedGas}() {} catch {}
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
+        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+        try IPoolCore(core).updateInterestRateModel{gas: passedGas}() {} catch {}
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = interest * totalSupply / (lastBalance + totalDebt);
