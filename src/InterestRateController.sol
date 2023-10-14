@@ -14,6 +14,7 @@ contract InterestRateModel {
 
     struct PoolState {
         uint utilCumulative;
+        uint lastUtilBps;
         uint lastUtilUpdate;
         uint lastBorrowRateUpdate;
         uint borrowRate;
@@ -39,9 +40,11 @@ contract InterestRateModel {
         require(msg.sender == core, "onlyCore");
         IPool poolContract = IPool(pool);
         uint supplied = poolContract.getSupplied();
-        uint utilBps;
+        uint currentUtilBps;
         uint debt = poolContract.totalDebt();
-        if (supplied > 0) utilBps = debt * 10000 / supplied; // else util is already 0
+        if (supplied > 0) currentUtilBps = debt * 10000 / supplied; // else util is already 0
+        uint utilBps = poolStates[pool].lastUtilBps;
+        poolStates[pool].lastUtilBps = currentUtilBps;
         uint lastUtilUpdate = poolStates[pool].lastUtilUpdate;
         uint utilTimeElapsed = block.timestamp - lastUtilUpdate;
         if(utilTimeElapsed > 0 && lastUtilUpdate > 0) {

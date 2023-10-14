@@ -13,6 +13,7 @@ contract CollateralFeeController {
 
     struct CollateralState {
         uint utilCumulative;
+        uint lastUtilBps;
         uint lastUtilUpdate;
         uint lastFeeUpdate;
         uint fee;
@@ -41,8 +42,10 @@ contract CollateralFeeController {
             ICollateral collateralContract = ICollateral(collateral);
             uint deposited = collateralContract.getTotalCollateral();
             uint depositedUsd = deposited * collateralPriceMantissa / MANTISSA;
-            uint utilBps = 10000;
-            if (capUsd > 0) utilBps = depositedUsd * 10000 / capUsd;
+            uint currentUtilBps = 10000;
+            if (capUsd > 0) currentUtilBps = depositedUsd * 10000 / capUsd;
+            uint utilBps = collateralStates[collateral].lastUtilBps;
+            collateralStates[collateral].lastUtilBps = currentUtilBps;
             uint lastUtilUpdate = collateralStates[collateral].lastUtilUpdate;
             uint utilTimeElapsed = block.timestamp - lastUtilUpdate;
             if(utilTimeElapsed > 0 && lastUtilUpdate > 0) {
