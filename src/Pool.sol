@@ -52,8 +52,8 @@ contract Pool {
         uint newShares = sharesBefore + shares;
         require(newShares <= sqrtMaxUint, "overflow");
         balanceOf[recipient] = newShares;
-        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function withdraw(uint256 amount) public {
@@ -69,8 +69,8 @@ contract Pool {
         require(shares > 0, "zeroShares");
         totalSupply -= shares;
         balanceOf[msg.sender] -= shares;
-        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function accrueInterest() internal {
@@ -101,8 +101,8 @@ contract Pool {
         debtSharesOf[msg.sender] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
-        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function repay(address to, uint amount) public {
@@ -118,8 +118,8 @@ contract Pool {
         debtSharesOf[msg.sender] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= amount;
-        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function writeOff(address account) public {
@@ -130,7 +130,6 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
-        lastBalance = token.balanceOf(address(this));
     }
 
     function getAssetsOf(address account) public view returns (uint) {

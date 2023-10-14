@@ -64,8 +64,8 @@ contract Collateral {
         uint newShares = sharesBefore + shares;
         require(newShares <= sqrtMaxUint, "overflow");
         sharesOf[recipient] = newShares;
-        lastBalance = token.balanceOf(address(this));
         token.transferFrom(msg.sender, address(this), amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function withdraw(uint256 amount) public {
@@ -82,8 +82,8 @@ contract Collateral {
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[msg.sender] -= shares;
-        lastBalance = token.balanceOf(address(this));
         token.transfer(msg.sender, amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function getCollateralOf(address account) public view returns (uint256) {
@@ -105,8 +105,8 @@ contract Collateral {
         require(shares > 0, "zeroShares");
         sharesSupply -= shares;
         sharesOf[account] -= shares;
-        lastBalance = token.balanceOf(address(this));
         token.transfer(to, amount);
+        lastBalance = token.balanceOf(address(this));
     }
 
     function getTotalCollateral() external view returns (uint256) {
