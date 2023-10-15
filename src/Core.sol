@@ -38,7 +38,7 @@ contract Core {
     uint public constant MAX_SOFT_CAP = 2000;
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
-    uint public dustUsd = 1000e18; // $1000
+    uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
     uint lastSupplyValueWeeklyLowValue;
     uint lastSupplyValueWeeklyLowUpdate;
     uint256 public lockDepth;
@@ -79,6 +79,7 @@ contract Core {
     function setCollateralFeeModel(ICollateralFeeModel _collateralFeeModel) public onlyOwner { collateralFeeModel = _collateralFeeModel; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
+    function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
 
     function globalLock(address caller) external {
         require(collateralsData[Collateral(msg.sender)].enabled || poolsData[Pool(msg.sender)].enabled, "onlyCollateralsOrPools");
@@ -230,7 +231,6 @@ contract Core {
         // enforce both caps
         uint totalCollateralAfter = collateral.getTotalCollateral() + amount;
         uint totalValueAfter = totalCollateralAfter * price / MANTISSA;
-        require(totalValueAfter >= dustUsd, "collateralBalanceTooSmall");
         require(totalValueAfter <= collateralsData[collateral].hardCap, "hardCapExceeded");
         require(totalValueAfter <= softCapUsd, "softCapExceeded");
         if(collateralUsers[collateral][recipient] == false) {
@@ -272,7 +272,6 @@ contract Core {
                 uint thisCollateralBalance = collateral.getCollateralOf(caller);
                 if(thisCollateral == collateral) thisCollateralBalance -= amount;
                 uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
-                if(thisCollateral == collateral && thisCollateralBalance > 0) require(thisCollateralUsd >= dustUsd, "collateralBalanceTooSmall");
                 assetsUsd += thisCollateralUsd;
             }
         }
@@ -371,7 +370,6 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
             if(thisPool == pool) {
-                require(debtUsd >= dustUsd, "debtTooSmall");
                 uint extraDebtUsd = amount * price / MANTISSA;
                 uint day = block.timestamp / 1 days;
                 require(extraDebtUsd + dailyBorrowsUsd[day] <= dailyBorrowLimitUsd, "dailyBorrowLimitExceeded");
@@ -402,11 +400,6 @@ contract Core {
                 }
             }
             poolUsers[pool][caller] = false;
-        } else {
-            uint afterRepay = debt - amount;
-            uint price = oracle.getDebtPriceMantissa(address(pool));
-            uint afterRepayUsd = afterRepay * price / MANTISSA;
-            require(afterRepayUsd >= dustUsd, "debtTooSmall");
         }
 
         // reduce daily borrows
@@ -557,7 +550,7 @@ contract Core {
             );
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             uint thisCollateralUsd = thisCollateralBalance * price / MANTISSA;
-            require(thisCollateralUsd < dustUsd, "collateralBalanceTooHigh");
+            require(thisCollateralUsd < badDebtCollateralThresholdUsd, "collateralBalanceTooHigh");
             assetsUsd += thisCollateralUsd;
         }
 
