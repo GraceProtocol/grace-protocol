@@ -50,6 +50,7 @@ contract Core {
     uint constant MANTISSA = 1e18;
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
     uint constant MAX_COLLATERAL_FACTOR_BPS = 1000000; // 10,000%
+    uint public dailyBorrowLimitUsd = 100000e18; // $100,000
     mapping (Collateral => CollateralConfig) public collateralsData;
     mapping (Pool => PoolConfig) public poolsData;
     mapping (address => Pool) public underlyingToPool;
@@ -59,6 +60,7 @@ contract Core {
     mapping (address => Collateral[]) public userCollaterals;
     mapping (address => Pool[]) public userPools;
     mapping (uint => uint) public supplyValueSemiWeeklyLowUsd;
+    mapping (uint => uint) public dailyBorrowsUsd;
     Pool[] public poolList;
     Collateral[] public collateralList;
 
@@ -368,7 +370,13 @@ contract Core {
             if(thisPool == pool) debt += amount;
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
-            if(thisPool == pool) require(debtUsd >= dustUsd, "debtTooSmall");
+            if(thisPool == pool) {
+                require(debtUsd >= dustUsd, "debtTooSmall");
+                uint extraDebtUsd = amount * price / MANTISSA;
+                uint day = block.timestamp / 1 days;
+                require(extraDebtUsd + dailyBorrowsUsd[day] <= dailyBorrowLimitUsd, "dailyBorrowLimitExceeded");
+                dailyBorrowsUsd[day] += extraDebtUsd;
+            }
             liabilitiesUsd += debtUsd;
         }
 
@@ -399,6 +407,16 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(pool));
             uint afterRepayUsd = afterRepay * price / MANTISSA;
             require(afterRepayUsd >= dustUsd, "debtTooSmall");
+        }
+
+        // reduce daily borrows
+        uint price = oracle.getDebtPriceMantissa(address(pool));
+        uint repaidDebtUsd = amount * price / MANTISSA;
+        uint day = block.timestamp / 1 days;
+        if(dailyBorrowsUsd[day] > repaidDebtUsd) {
+            unchecked { dailyBorrowsUsd[day] -= repaidDebtUsd; }
+        } else {
+            dailyBorrowsUsd[day] = 0;
         }
 
         return true;
