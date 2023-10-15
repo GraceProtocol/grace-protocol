@@ -80,6 +80,7 @@ contract Core {
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
+    function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner { dailyBorrowLimitUsd = _dailyBorrowLimitUsd; }
 
     function globalLock(address caller) external {
         require(collateralsData[Collateral(msg.sender)].enabled || poolsData[Pool(msg.sender)].enabled, "onlyCollateralsOrPools");
