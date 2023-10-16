@@ -15,6 +15,7 @@ contract Reserve {
         uint timestamp;
         uint256[] amounts;
         IERC20[] tokens;
+        address dst;
     }
 
     IERC20 public immutable grace;
@@ -41,18 +42,18 @@ contract Reserve {
 
     function setOwner(address _owner) external onlyOwner { owner = _owner; }
 
-    function requestPull(IERC20[] calldata tokens, uint256[] calldata amounts) external onlyOwner {
+    function requestPull(IERC20[] calldata tokens, uint256[] calldata amounts, address dst) external onlyOwner {
         require(tokens.length == amounts.length, "lengthMismatch");
-        pullRequest = PullRequest(block.timestamp, amounts, tokens);
-        emit PullRequested(msg.sender, amounts, tokens);
+        pullRequest = PullRequest(block.timestamp, amounts, tokens, dst);
+        emit PullRequested(msg.sender, amounts, tokens, dst);
     }
 
-    function executePull(address dst) external onlyOwner {
+    function executePull() external onlyOwner {
         PullRequest memory request = pullRequest;
         require(block.timestamp > request.timestamp + 90 days, "tooSoon");
-        pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0));
+        pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
-            _safeTransfer(address(request.tokens[i]), dst, request.amounts[i]);
+            _safeTransfer(address(request.tokens[i]), request.dst, request.amounts[i]);
         }
     }
 
@@ -78,6 +79,6 @@ contract Reserve {
         locked = 1;
     }
 
-    event PullRequested(address indexed sender, uint256[] amounts, IERC20[] tokens);
+    event PullRequested(address indexed sender, uint256[] amounts, IERC20[] tokens, address dst);
 
 }
