@@ -45,16 +45,20 @@ contract Reserve {
     function requestPull(IERC20[] calldata tokens, uint256[] calldata amounts, address dst) external onlyOwner {
         require(tokens.length == amounts.length, "lengthMismatch");
         pullRequest = PullRequest(block.timestamp, amounts, tokens, dst);
-        emit PullRequested(msg.sender, amounts, tokens, dst);
+        emit PullRequested(amounts, tokens, dst);
     }
 
     function executePull() external onlyOwner {
+        require(locked == 1, "locked");
+        locked = 2;
         PullRequest memory request = pullRequest;
         require(block.timestamp > request.timestamp + 90 days, "tooSoon");
         pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
             _safeTransfer(address(request.tokens[i]), request.dst, request.amounts[i]);
         }
+        locked = 1;
+        emit PullExecuted(request.amounts, request.tokens, request.dst);
     }
 
     function rageQuit(uint256 graceAmount, IERC20[] memory tokens) external {
@@ -76,9 +80,11 @@ contract Reserve {
             uint share = balance * shareMantissa / MANTISSA;
             _safeTransfer(address(tokens[i]), msg.sender, share);
         }
+        emit Redeemed(msg.sender, graceAmount);
         locked = 1;
     }
 
-    event PullRequested(address indexed sender, uint256[] amounts, IERC20[] tokens, address dst);
-
+    event Redeemed(address indexed sender, uint256 graceAmount);
+    event PullRequested(uint256[] amounts, IERC20[] tokens, address dst);
+    event PullExecuted(uint256[] amounts, IERC20[] tokens, address dst);
 }
