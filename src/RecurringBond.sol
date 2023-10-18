@@ -5,7 +5,10 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function mint(address recipient, uint amount) external;
+}
+
+interface IFactory {
+    function transferReward(address recipient, uint amount) external;
 }
 
 contract RecurringBond {
@@ -16,8 +19,9 @@ contract RecurringBond {
     uint constant MANTISSA = 1e18;
     IERC20 public immutable underlying;
     IERC20 public immutable reward;
-    address public operator;
+    IFactory public factory;
     uint public rewardBudget;
+    uint public nextRewardBudget;
     uint public immutable startTimestamp;
     uint public immutable bondDuration;
     uint public immutable auctionDuration;
@@ -35,7 +39,6 @@ contract RecurringBond {
         IERC20 _reward,
         string memory _name,
         string memory _symbol,
-        address _operator,
         uint _rewardBudget,
         uint _startTimestamp,
         uint _bondDuration,
@@ -44,12 +47,11 @@ contract RecurringBond {
         require(_startTimestamp > block.timestamp, "startTimestamp must be in the future");
         require(_auctionDuration > 0, "auctionDuration must be greater than 0");
         require(_bondDuration > _auctionDuration, "bondDuration must be greater than auctionDuration");
-        require(_rewardBudget > 0, "rewardBudget must be greater than 0");
         underlying = _underlying;
         reward = _reward;
         name = _name;
         symbol = _symbol;
-        operator = _operator;
+        factory = IFactory(msg.sender);
         rewardBudget = _rewardBudget;
         startTimestamp = _startTimestamp;
         bondDuration = _bondDuration;
@@ -62,6 +64,7 @@ contract RecurringBond {
             if(totalSupply > 0) {
                 uint rewardsAccrued = deltaCycles * rewardBudget * MANTISSA;
                 rewardIndexMantissa += rewardsAccrued / totalSupply;
+                rewardBudget = nextRewardBudget;
             }
             lastUpdateCycle = getCycle();
         }
@@ -75,7 +78,7 @@ contract RecurringBond {
 
     function getCycle() public view returns (uint) {
         if (block.timestamp < startTimestamp) return 0;
-        return (block.timestamp - startTimestamp) / bondDuration;
+        return ((block.timestamp - startTimestamp) / bondDuration) + 1;
     }
 
     function isAuctionActive() public view returns (bool) {
@@ -119,7 +122,8 @@ contract RecurringBond {
         updateIndex(msg.sender);
         uint amount = accruedRewards[msg.sender];
         accruedRewards[msg.sender] = 0;
-        reward.mint(msg.sender, amount);
+        factory.transferReward(msg.sender, amount);
+        
     }
 
     function getNextMaturity() external view returns (uint) {
@@ -178,14 +182,11 @@ contract RecurringBond {
 
     function setBudget(uint _rewardBudget) external {
         updateIndex(msg.sender);
-        require(msg.sender == operator, "only operator");
-        require(!isAuctionActive(), "auction is active");
-        rewardBudget = _rewardBudget;
-    }
-
-    function setOperator(address _operator) external {
-        require(msg.sender == operator, "only operator");
-        operator = _operator;
+        require(msg.sender == address(factory), "only factory");
+        nextRewardBudget = _rewardBudget;
+        if (!isAuctionActive()) {
+            rewardBudget = _rewardBudget;
+        }
     }
 
     event Transfer(address indexed from, address indexed to, uint value);
