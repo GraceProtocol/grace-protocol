@@ -142,6 +142,11 @@ contract RecurringBond {
         }
     }
 
+    function getCurrentBondYield(uint amount) external view returns (uint) {
+        if (totalSupply == 0) return rewardBudget;
+        return rewardBudget * amount / totalSupply;
+    }
+
     function transfer(address recipient, uint256 amount) external returns (bool) {
         updateIndex(msg.sender);
         updateIndex(recipient);
