@@ -153,7 +153,6 @@ contract RecurringBond {
         updateIndex(msg.sender);
         require(msg.sender == operator, "only operator");
         require(!isAuctionActive(), "auction is active");
-        require(_rewardBudget > 0, "rewardBudget must be greater than 0");
         rewardBudget = _rewardBudget;
     }
 
