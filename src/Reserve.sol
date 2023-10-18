@@ -80,11 +80,11 @@ contract Reserve {
             uint share = balance * shareMantissa / MANTISSA;
             _safeTransfer(address(tokens[i]), msg.sender, share);
         }
-        emit Redeemed(msg.sender, graceAmount);
+        emit RageQuit(msg.sender, graceAmount);
         locked = 1;
     }
 
-    event Redeemed(address indexed sender, uint256 graceAmount);
+    event RageQuit(address indexed sender, uint256 graceAmount);
     event PullRequested(uint256[] amounts, IERC20[] tokens, address dst);
     event PullExecuted(uint256[] amounts, IERC20[] tokens, address dst);
 }

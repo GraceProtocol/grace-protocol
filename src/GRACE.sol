@@ -56,8 +56,8 @@ contract Grace {
     /// @notice A record of states for signing / validating signatures
     mapping (address => uint) public nonces;
 
-    /// @notice A record of whitelisted minters
-    mapping (address => bool) public minters;
+    /// @notice A record of whitelisted minters and their allowances
+    mapping (address => uint) public minters;
 
     /// @notice An event thats emitted when the operator address is changed
     event OperatorChanged(address operator, address newOperator);
@@ -74,8 +74,8 @@ contract Grace {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
-    /// @notice An event thats emitted when a minter is changed
-    event MinterChanged(address indexed minter, bool isMinter);
+    /// @notice An event thats emitted when a minter allowance is changed
+    event MinterAllowanceChanged(address indexed minter, uint newAllowance);
 
     /**
      * @notice Construct a new Grace token
@@ -107,11 +107,12 @@ contract Grace {
     /**
      * @notice Change the minter address
      * @param minter_ The address of the new minter
+     * @param mintableAllowance The amount of tokens the minter is allowed to mint
      */
-    function setMinter(address minter_, bool isMinter) external {
+    function setMinter(address minter_, uint mintableAllowance) external {
         require(msg.sender == operator, "Grace::setMinter: only the operator can set minters");
-        minters[minter_] = isMinter;
-        emit MinterChanged(minter_, isMinter);
+        minters[minter_] = mintableAllowance;
+        emit MinterAllowanceChanged(minter_, mintableAllowance);
     }
 
     /**
@@ -397,9 +398,8 @@ contract Grace {
      * @param rawAmount The number of tokens to be minted
      */
     function mint(address dst, uint rawAmount) external {
-        require(minters[msg.sender], "Grace::mint: only a whitelisted minter can mint");
         require(dst != address(0), "Grace::mint: cannot transfer to the zero address");
-
+        minters[msg.sender] -= rawAmount;
         // mint the amount
         uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
         totalSupply = safe96(totalSupply + amount, "Grace::mint: totalSupply exceeds 96 bits");
