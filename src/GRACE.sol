@@ -59,6 +59,12 @@ contract Grace {
     /// @notice A record of whitelisted minters and their allowances
     mapping (address => uint) public minters;
 
+    /// @notice A record of daily minting limits for each minter
+    mapping (address => uint) public dailyMintLimits;
+
+    /// @notice A record of each day's minting totals for each minter
+    mapping (address => mapping (uint => uint)) public dailyMintTotals;
+
     /// @notice An event thats emitted when the operator address is changed
     event OperatorChanged(address operator, address newOperator);
 
@@ -74,8 +80,8 @@ contract Grace {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
-    /// @notice An event thats emitted when a minter allowance is changed
-    event MinterAllowanceChanged(address indexed minter, uint newAllowance);
+    /// @notice An event thats emitted when a minter is changed
+    event MinterChanged(address indexed minter, uint newAllowance, uint newDailyLimit);
 
     /**
      * @notice Construct a new Grace token
@@ -108,11 +114,13 @@ contract Grace {
      * @notice Change the minter address
      * @param minter_ The address of the new minter
      * @param mintableAllowance The amount of tokens the minter is allowed to mint
+     * @param dailyLimit The amount of tokens the minter is allowed to mint per day
      */
-    function setMinter(address minter_, uint mintableAllowance) external {
+    function setMinter(address minter_, uint mintableAllowance, uint dailyLimit) external {
         require(msg.sender == operator, "Grace::setMinter: only the operator can set minters");
         minters[minter_] = mintableAllowance;
-        emit MinterAllowanceChanged(minter_, mintableAllowance);
+        dailyMintLimits[minter_] = dailyLimit;
+        emit MinterChanged(minter_, mintableAllowance, dailyLimit);
     }
 
     /**
@@ -398,8 +406,10 @@ contract Grace {
      * @param rawAmount The number of tokens to be minted
      */
     function mint(address dst, uint rawAmount) external {
+        require(rawAmount + dailyMintTotals[msg.sender][block.timestamp / 1 days] <= dailyMintLimits[msg.sender], "Grace::mint: daily mint limit exceeded");
         require(dst != address(0), "Grace::mint: cannot transfer to the zero address");
         minters[msg.sender] -= rawAmount;
+        dailyMintTotals[msg.sender][block.timestamp / 1 days] += rawAmount;
         // mint the amount
         uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
         totalSupply = safe96(totalSupply + amount, "Grace::mint: totalSupply exceeds 96 bits");
