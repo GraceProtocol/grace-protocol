@@ -5,6 +5,7 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function mint(address recipient, uint amount) external;
 }
 
 contract RecurringBond {
@@ -118,7 +119,7 @@ contract RecurringBond {
         updateIndex(msg.sender);
         uint amount = accruedRewards[msg.sender];
         accruedRewards[msg.sender] = 0;
-        reward.transfer(msg.sender, amount);
+        reward.mint(msg.sender, amount);
     }
 
     function getNextMaturity() external view returns (uint) {
