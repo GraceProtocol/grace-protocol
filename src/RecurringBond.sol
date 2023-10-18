@@ -121,6 +121,27 @@ contract RecurringBond {
         reward.transfer(msg.sender, amount);
     }
 
+    function getNextMaturity() external view returns (uint) {
+        if (block.timestamp < startTimestamp) return startTimestamp + bondDuration;
+        uint currentCycle = getCycle();
+        uint currentCycleStart = startTimestamp + (currentCycle * bondDuration);
+        uint currentCycleEnd = currentCycleStart + bondDuration;
+        return currentCycleEnd;
+    }
+
+    function getNextAuctionEnd() external view returns (uint) {
+        if (block.timestamp < startTimestamp) return startTimestamp + auctionDuration;
+        uint currentCycle = getCycle();
+        if(isAuctionActive()) {
+            uint currentCycleStart = startTimestamp + (currentCycle * bondDuration);
+            uint auctionEnd = currentCycleStart + auctionDuration;
+            return auctionEnd;
+        } else {
+            uint nextCycleStart = startTimestamp + ((currentCycle + 1) * bondDuration);
+            return nextCycleStart + auctionDuration;
+        }
+    }
+
     function transfer(address recipient, uint256 amount) external returns (bool) {
         updateIndex(msg.sender);
         updateIndex(recipient);
