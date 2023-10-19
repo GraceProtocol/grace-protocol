@@ -82,7 +82,7 @@ contract RecurringBond {
     function isAuctionActive() public view returns (bool) {
         if (block.timestamp < startTimestamp) return false;
         uint currentCycle = getCycle();
-        uint currentCycleStart = startTimestamp + (currentCycle * bondDuration);
+        uint currentCycleStart = startTimestamp + ((currentCycle - 1) * bondDuration);
         uint auctionEnd = currentCycleStart + auctionDuration;
         return block.timestamp < auctionEnd;
     }
@@ -127,7 +127,7 @@ contract RecurringBond {
     function getNextMaturity() external view returns (uint) {
         if (block.timestamp < startTimestamp) return startTimestamp + bondDuration;
         uint currentCycle = getCycle();
-        uint currentCycleStart = startTimestamp + (currentCycle * bondDuration);
+        uint currentCycleStart = startTimestamp + ((currentCycle - 1) * bondDuration);
         uint currentCycleEnd = currentCycleStart + bondDuration;
         return currentCycleEnd;
     }
@@ -136,7 +136,7 @@ contract RecurringBond {
         if (block.timestamp < startTimestamp) return startTimestamp + auctionDuration;
         uint currentCycle = getCycle();
         if(isAuctionActive()) {
-            uint currentCycleStart = startTimestamp + (currentCycle * bondDuration);
+            uint currentCycleStart = startTimestamp + ((currentCycle - 1) * bondDuration);
             uint auctionEnd = currentCycleStart + auctionDuration;
             return auctionEnd;
         } else {
