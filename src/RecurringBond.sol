@@ -39,7 +39,6 @@ contract RecurringBond {
         IERC20 _reward,
         string memory _name,
         string memory _symbol,
-        uint _rewardBudget,
         uint _startTimestamp,
         uint _bondDuration,
         uint _auctionDuration
@@ -52,7 +51,6 @@ contract RecurringBond {
         name = _name;
         symbol = _symbol;
         factory = IFactory(msg.sender);
-        rewardBudget = _rewardBudget;
         startTimestamp = _startTimestamp;
         bondDuration = _bondDuration;
         auctionDuration = _auctionDuration;

@@ -4,7 +4,6 @@ pragma solidity 0.8.21;
 import "./RecurringBond.sol";
 
 interface IGrace {
-    function balanceOf(address account) external view returns (uint256);
     function mint(address recipient, uint amount) external;
 }
 
@@ -19,6 +18,10 @@ contract BondFactory {
     constructor (IGrace _grace, address _operator) {
         GRACE = _grace;
         operator = _operator;
+    }
+
+    function allBondsLength() external view returns (uint) {
+        return allBonds.length;
     }
 
     function createBond(
@@ -61,6 +64,7 @@ contract BondFactory {
 
     function setBudget(address bond, uint budget) external {
         require(msg.sender == budgeteer, "onlyBudgeteer");
+        require(isBond[bond], "onlyBond");
         RecurringBond(bond).setBudget(budget);
     }
 
