@@ -11,7 +11,6 @@ contract BondFactory {
 
     IGrace public immutable GRACE;
     address public operator;
-    address public budgeteer;
     mapping (address => bool) public isBond;
     address[] public allBonds;
 
@@ -52,18 +51,13 @@ contract BondFactory {
         operator = _operator;
     }
 
-    function setBudgeteer(address _budgeteer) external {
-        require(msg.sender == operator, "onlyOperator");
-        budgeteer = _budgeteer;
-    }
-
     function transferReward(address recipient, uint amount) external {
         require(isBond[msg.sender], "onlyBond");
         GRACE.mint(recipient, amount);
     }
 
     function setBudget(address bond, uint budget) external {
-        require(msg.sender == budgeteer, "onlyBudgeteer");
+        require(msg.sender == operator, "onlyOperator");
         require(isBond[bond], "onlyBond");
         RecurringBond(bond).setBudget(budget);
     }
