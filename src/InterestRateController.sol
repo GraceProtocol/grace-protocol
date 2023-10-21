@@ -10,7 +10,7 @@ interface ICore {
     function owner() external view returns (address);
 }
 
-contract InterestRateModel {
+contract InterestRateController {
 
     struct PoolState {
         uint utilCumulative;

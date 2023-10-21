@@ -3,11 +3,10 @@ pragma solidity 0.8.21;
 
 interface IPoolCore {
     function onPoolDeposit(address caller, address recipient, uint256 amount) external returns (bool);
-    function onPoolWithdraw(address caller, uint256 amount) external returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, address to, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool) external view returns (uint256, address);
-    function updateInterestRateModel() external;
+    function updateInterestRateController() external;
     function globalLock(address caller) external;
     function globalUnlock() external;
 }
@@ -66,7 +65,6 @@ contract Pool {
     }
 
     function withdraw(uint256 amount) public lock {
-        require(core.onPoolWithdraw(msg.sender, amount), "beforePoolWithdraw");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         uint shares;
         if(amount == type(uint256).max) {
@@ -86,7 +84,7 @@ contract Pool {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try IPoolCore(core).updateInterestRateModel{gas: passedGas}() {} catch {}
+        try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = interest * totalSupply / (lastBalance + totalDebt);

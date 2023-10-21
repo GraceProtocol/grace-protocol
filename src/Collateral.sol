@@ -5,7 +5,7 @@ interface ICollateralCore {
     function onCollateralDeposit(address caller, address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
     function getCollateralFeeBps(address collateral) external view returns (uint256, address);
-    function updateCollateralFeeModel() external;
+    function updateCollateralFeeController() external;
     function globalLock(address caller) external;
     function globalUnlock() external;
 }
@@ -44,7 +44,7 @@ contract Collateral {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try ICollateralCore(core).updateCollateralFeeModel{gas: passedGas}() {} catch {}
+        try ICollateralCore(core).updateCollateralFeeController{gas: passedGas}() {} catch {}
         (uint currentFeeBps, address feeDestination) = core.getCollateralFeeBps(address(token));
         uint feeBps = lastFeeBps;
         lastFeeBps = currentFeeBps;

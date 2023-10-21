@@ -42,6 +42,12 @@ contract GovernorAlpha {
     /// @notice The total number of proposals
     uint public proposalCount;
 
+    /// @notice The timestamp of contract deployment
+    uint public immutable deploymentTime = block.timestamp;
+
+    /// @notice The duration of the guarded launch
+    uint public constant guardedLaunchDuration = 90 days;
+
     struct Proposal {
         /// @notice Unique id for looking up a proposal
         uint id;
@@ -141,6 +147,7 @@ contract GovernorAlpha {
         timelock = TimelockInterface(timelock_);
         grace = GraceInterface(grace_);
         guardian = guardian_;
+        deploymentTime = block.timestamp;
     }
 
     function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint) {
@@ -315,8 +322,18 @@ contract GovernorAlpha {
         timelock.acceptAdmin();
     }
 
+    function __queueSetTimelockPendingAdmin(address newPendingAdmin, uint eta) public {
+        require(msg.sender == guardian, "GovernorAlpha::__queueSetTimelockPendingAdmin: sender must be gov guardian");
+        timelock.queueTransaction(address(timelock), 0, "setPendingAdmin(address)", abi.encode(newPendingAdmin), eta);
+    }
+
+    function __executeSetTimelockPendingAdmin(address newPendingAdmin, uint eta) public {
+        require(msg.sender == guardian, "GovernorAlpha::__executeSetTimelockPendingAdmin: sender must be gov guardian");
+        timelock.executeTransaction(address(timelock), 0, "setPendingAdmin(address)", abi.encode(newPendingAdmin), eta);
+    }
+
     function __abdicate() public {
-        require(msg.sender == guardian, "GovernorAlpha::__abdicate: sender must be gov guardian");
+        require(msg.sender == guardian || block.timestamp >= deploymentTime + guardedLaunchDuration, "GovernorAlpha::__abdicate: sender must be gov guardian or guarded launch must be over");
         guardian = address(0);
     }
 

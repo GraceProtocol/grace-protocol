@@ -25,8 +25,9 @@ contract Reserve {
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
     PullRequest public pullRequest;
 
-    constructor(IERC20 _grace) {
+    constructor(IERC20 _grace, address _owner) {
         grace = _grace;
+        owner = _owner;
     }
 
     modifier onlyOwner {

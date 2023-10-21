@@ -5,12 +5,12 @@ import "./Oracle.sol";
 import "./Collateral.sol";
 import "./Pool.sol";
 
-interface IInterestRateModel {
+interface IInterestRateController {
     function getBorrowRateBps(address pool) external view returns (uint256);
     function update(address pool) external;
 }
 
-interface ICollateralFeeModel {
+interface ICollateralFeeController {
     function getCollateralFeeBps(address collateral) external view returns (uint256);
     function update(address collateral, uint collateralPriceMantissa, uint capUsd) external;
 }
@@ -44,8 +44,8 @@ contract Core {
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
-    IInterestRateModel public interestRateModel;
-    ICollateralFeeModel public collateralFeeModel;
+    IInterestRateController public interestRateController;
+    ICollateralFeeController public collateralFeeController;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
@@ -75,8 +75,8 @@ contract Core {
 
     function setOwner(address _owner) public onlyOwner { owner = _owner; }
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
-    function setInterestRateModel(IInterestRateModel _interestRateModel) public onlyOwner { interestRateModel = _interestRateModel; }
-    function setCollateralFeeModel(ICollateralFeeModel _collateralFeeModel) public onlyOwner { collateralFeeModel = _collateralFeeModel; }
+    function setInterestRateController(IInterestRateController _interestRateController) public onlyOwner { interestRateController = _interestRateController; }
+    function setCollateralFeeController(ICollateralFeeController _collateralFeeController) public onlyOwner { collateralFeeController = _collateralFeeController; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
@@ -168,7 +168,7 @@ contract Core {
         oracle.setCollateralFeed(address(collateral.token()), feed);
     }
 
-    function updateCollateralFeeModel() external {
+    function updateCollateralFeeController() external {
         Collateral collateral = Collateral(msg.sender);
         require(collateralsData[collateral].enabled, "onlyCollaterals");
         uint weekLow = getSupplyValueWeeklyLow();
@@ -180,7 +180,7 @@ contract Core {
             collateral.getTotalCollateral(),
             capUsd
         );
-        collateralFeeModel.update(address(collateral), price, capUsd);
+        collateralFeeController.update(address(collateral), price, capUsd);
     }
 
     function getSupplyValueUsd() internal returns (uint256) {
@@ -299,7 +299,7 @@ contract Core {
         if(feeDestination == address(0)) return (0, address(0));
 
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getCollateralFeeModelFeeBps{gas:passedGas}(collateral) returns (uint256 _feeBps) {
+        try Core(this).getCollateralFeeControllerFeeBps{gas:passedGas}(collateral) returns (uint256 _feeBps) {
             if(_feeBps > MAX_COLLATERAL_FACTOR_BPS) _feeBps = MAX_COLLATERAL_FACTOR_BPS;
             return (_feeBps, feeDestination);
         } catch {
@@ -307,30 +307,26 @@ contract Core {
         }
     }
 
-    function updateInterestRateModel() external {
+    function updateInterestRateController() external {
         Pool pool = Pool(msg.sender);
         require(poolsData[pool].enabled, "onlyPools");
-        interestRateModel.update(address(pool));
+        interestRateController.update(address(pool));
     }
 
-    function getInterestRateModelBorrowRate(address pool) external view returns (uint256) {
+    function getInterestRateControllerBorrowRate(address pool) external view returns (uint256) {
         require(msg.sender == address(this), "onlyCore");
-        return interestRateModel.getBorrowRateBps(pool);
+        return interestRateController.getBorrowRateBps(pool);
     }
 
-    function getCollateralFeeModelFeeBps(address collateral) external view returns (uint256) {
+    function getCollateralFeeControllerFeeBps(address collateral) external view returns (uint256) {
         require(msg.sender == address(this), "onlyCore");
-        return collateralFeeModel.getCollateralFeeBps(collateral);
+        return collateralFeeController.getCollateralFeeBps(collateral);
     }
 
-    function onPoolDeposit(address, address, uint256 amount) external returns (bool) {
+    function onPoolDeposit(address, address, uint256 amount) external view returns (bool) {
         Pool pool = Pool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         require(pool.getSupplied() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
-        return true;
-    }
-
-    function onPoolWithdraw(address, uint256) external returns (bool) {
         return true;
     }
 
@@ -417,11 +413,11 @@ contract Core {
     }
 
     function getBorrowRateBps(address pool) external view returns (uint256, address) {
-        if (interestRateModel == IInterestRateModel(address(0))) return (0, address(0));
+        if (interestRateController == IInterestRateController(address(0))) return (0, address(0));
         if(feeDestination == address(0)) return (0, address(0));
         
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getInterestRateModelBorrowRate{gas: passedGas}(pool) returns (uint256 _borrowRateBps) {
+        try Core(this).getInterestRateControllerBorrowRate{gas: passedGas}(pool) returns (uint256 _borrowRateBps) {
             if(_borrowRateBps > MAX_BORROW_RATE_BPS) _borrowRateBps = MAX_BORROW_RATE_BPS;
             return (_borrowRateBps, feeDestination);
         } catch {
