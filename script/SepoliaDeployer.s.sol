@@ -10,6 +10,7 @@ import {Reserve, IERC20} from "src/Reserve.sol";
 import {Timelock} from "src/Timelock.sol";
 import {GovernorAlpha} from "src/GovernorAlpha.sol";
 import {FixedPriceFeed} from "src/FixedPriceFeed.sol";
+import {BondFactory} from "src/BondFactory.sol";
 
 contract SepoliaDeployerScript is Script {
     function setUp() public {}
@@ -28,7 +29,7 @@ contract SepoliaDeployerScript is Script {
         // Deploy Timelock
         Timelock timelock = new Timelock(address(this));
         // deploy GRACE
-        Grace grace = new Grace(address(timelock));
+        Grace grace = new Grace(address(this));
         // deploy Reserve
         Reserve reserve = new Reserve(IERC20(address(grace)), address(timelock));
         // Set reserve as fee destination
@@ -39,7 +40,7 @@ contract SepoliaDeployerScript is Script {
         // 8 decimal token
         address YEENUS = 0x93fCA4c6E2525C09c95269055B46f16b1459BF9d;
         // Deploy USDC pool
-        core.deployPool(YEENUS, address(usdcPriceFeed), 100000 * 1e6);
+        address usdcPool = core.deployPool(YEENUS, address(usdcPriceFeed), 100000 * 1e6);
 
         // Chainlink feed on Sepolia
         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
@@ -48,8 +49,27 @@ contract SepoliaDeployerScript is Script {
         // Deploy WETH collateral
         core.deployCollateral(weth, ethFeed, 8500, 1_000_000 ether, 2000);
         
+        // Deploy Bond Factory
+        BondFactory bondFactory = new BondFactory(address(grace), address(this));
+        // Set Bond Factory as Grace minter
+        grace.setMinter(address(bondFactory), type(uint).max, 1000 * 1e18);
+        // Create USDC pool bond
+        bondFactory.createBond(
+            usdcPool,
+            "Grace USDC 1-week bond",
+            "G-USDC-1W",
+            block.timestamp,
+            7 days,
+            1 days,
+            1000 * 1e18
+        );
+
+        // Set BondFactory operator to timelock
+        bondFactory.setOperator(address(timelock));
         // Set core ownership to timelock
         core.setOwner(address(timelock));
+        // Set grace ownership to timelock
+        grace.setOperator(address(timelock));
         // Deploy GovernorAlpha
         GovernorAlpha governor = new GovernorAlpha(address(timelock), address(grace), address(this));
         // Set governor as pending admin of timelock

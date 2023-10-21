@@ -14,8 +14,8 @@ contract BondFactory {
     mapping (address => bool) public isBond;
     address[] public allBonds;
 
-    constructor (IGrace _grace, address _operator) {
-        GRACE = _grace;
+    constructor (address _grace, address _operator) {
+        GRACE = IGrace(_grace);
         operator = _operator;
     }
 
@@ -24,22 +24,24 @@ contract BondFactory {
     }
 
     function createBond(
-        IERC20 underlying,
+        address underlying,
         string memory name,
         string memory symbol,
         uint startTimestamp,
         uint bondDuration,
-        uint auctionDuration
+        uint auctionDuration,
+        uint initialRewardBudget
     ) external returns (address bond) {
         require(msg.sender == operator, "onlyOperator");
         bond = address(new RecurringBond(
-            underlying,
+            IERC20(underlying),
             IERC20(address(GRACE)),
             name,
             symbol,
             startTimestamp,
             bondDuration,
-            auctionDuration
+            auctionDuration,
+            initialRewardBudget
         ));
         isBond[bond] = true;
         allBonds.push(bond);

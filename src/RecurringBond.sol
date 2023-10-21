@@ -43,9 +43,10 @@ contract RecurringBond {
         string memory _symbol,
         uint _startTimestamp,
         uint _bondDuration,
-        uint _auctionDuration
+        uint _auctionDuration,
+        uint _initialRewardBudget
     ) {
-        require(_startTimestamp > block.timestamp, "startTimestamp must be in the future");
+        require(_startTimestamp >= block.timestamp, "startTimestamp must be now or in the future");
         require(_auctionDuration > 0, "auctionDuration must be greater than 0");
         require(_bondDuration > _auctionDuration, "bondDuration must be greater than auctionDuration");
         underlying = _underlying;
@@ -56,6 +57,8 @@ contract RecurringBond {
         startTimestamp = _startTimestamp;
         bondDuration = _bondDuration;
         auctionDuration = _auctionDuration;
+        rewardBudget = _initialRewardBudget;
+        nextRewardBudget = _initialRewardBudget;
     }
 
     function totalSupply() public view returns (uint) {

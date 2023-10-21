@@ -102,7 +102,7 @@ contract Core {
         lockDepth -= 1;
     }
 
-    function deployPool(address underlying, address feed, uint depositCap) public {
+    function deployPool(address underlying, address feed, uint depositCap) public returns (address) {
         require(msg.sender == owner, "onlyOwner");
         require(underlyingToPool[underlying] == Pool(address(0)), "underlyingAlreadyAdded");
         uint size;
@@ -116,6 +116,7 @@ contract Core {
         oracle.setPoolFeed(underlying, feed);
         poolList.push(pool);
         underlyingToPool[underlying] = pool;
+        return address(pool);
     }
 
     function configPool(Pool pool, address feed, uint depositCap) public {
@@ -131,7 +132,7 @@ contract Core {
         uint collateralFactor,
         uint hardCapUsd,
         uint softCapBps
-        ) public {
+        ) public returns (address) {
         require(msg.sender == owner, "onlyOwner");
         require(underlyingToCollateral[underlying] == Collateral(address(0)), "underlyingAlreadyAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
@@ -149,6 +150,7 @@ contract Core {
         oracle.setCollateralFeed(underlying, feed);
         collateralList.push(collateral);
         underlyingToCollateral[underlying] = collateral;
+        return address(collateral);
     }
 
     function configCollateral(
