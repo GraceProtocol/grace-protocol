@@ -27,12 +27,14 @@ contract RecurringBond {
     uint public immutable auctionDuration;
     uint public lastUpdateCycle;
     uint public rewardIndexMantissa;
-    uint public totalSupply;
+    uint public deposits;
 
-    mapping (address => uint) public balanceOf;
+    mapping (address => uint) public balances;
     mapping (address => mapping (address => uint)) public allowance;
     mapping (address => uint) public accountIndexMantissa;
     mapping (address => uint) public accruedRewards;
+    mapping (address => mapping(uint => uint)) public accountCyclePreorder;
+    mapping (uint => uint) public cyclePreorders;
 
     constructor(
         IERC20 _underlying,
@@ -56,19 +58,27 @@ contract RecurringBond {
         auctionDuration = _auctionDuration;
     }
 
+    function totalSupply() public view returns (uint) {
+        return deposits - cyclePreorders[getCycle()];
+    }
+
+    function balanceOf(address user) public view returns (uint) {
+        return balances[user] - accountCyclePreorder[user][getCycle()];
+    }
+
     function updateIndex(address user) internal {
         uint deltaCycles = getCycle() - lastUpdateCycle;
         if(deltaCycles > 0 && !isAuctionActive()) {
-            if(totalSupply > 0) {
+            if(deposits > 0) {
                 uint rewardsAccrued = deltaCycles * rewardBudget * MANTISSA;
-                rewardIndexMantissa += rewardsAccrued / totalSupply;
+                rewardIndexMantissa += rewardsAccrued / deposits;
                 rewardBudget = nextRewardBudget;
             }
             lastUpdateCycle = getCycle();
         }
 
         uint deltaIndex = rewardIndexMantissa - accountIndexMantissa[user];
-        uint bal = balanceOf[user];
+        uint bal = balanceOf(user);
         uint accountDelta = bal * deltaIndex;
         accountIndexMantissa[user] = rewardIndexMantissa;
         accruedRewards[user] += accountDelta / MANTISSA;
@@ -90,16 +100,48 @@ contract RecurringBond {
     function deposit(uint amount) external {
         updateIndex(msg.sender);
         require(isAuctionActive(), "auction is not active");
-        balanceOf[msg.sender] += amount;
-        totalSupply += amount;
+        balances[msg.sender] = balanceOf(msg.sender) + amount;
+        deposits += amount;
         underlying.transferFrom(msg.sender, address(this), amount);
     }
 
     function withdraw(uint amount) external {
         updateIndex(msg.sender);
         require(isAuctionActive(), "auction is not active");
-        balanceOf[msg.sender] -= amount;
-        totalSupply -= amount;
+        balances[msg.sender] = balanceOf(msg.sender) - amount;
+        deposits -= amount;
+        underlying.transfer(msg.sender, amount);
+    }
+
+    function totalPreorders() external view returns (uint) {
+        uint currentCycle = getCycle();
+        return cyclePreorders[currentCycle];
+    }
+
+    function preorderOf(address account) external view returns (uint) {
+        uint currentCycle = getCycle();
+        return accountCyclePreorder[account][currentCycle];
+    }
+
+    function preorder(uint amount) external {
+        updateIndex(msg.sender);
+        require(!isAuctionActive(), "auction is active");
+        uint currentCycle = getCycle();
+        accountCyclePreorder[msg.sender][currentCycle] += amount;
+        cyclePreorders[currentCycle] += amount;
+        balances[msg.sender] += amount;
+        deposits += amount;
+        underlying.transferFrom(msg.sender, address(this), amount);
+    }
+
+    function cancelPreorder(uint amount) external {
+        updateIndex(msg.sender);
+        require(!isAuctionActive(), "auction is active");
+        uint currentCycle = getCycle();
+        accountCyclePreorder[msg.sender][currentCycle] -= amount;
+        cyclePreorders[currentCycle] -= amount;
+        balances[msg.sender] -= amount;
+        deposits -= amount;
         underlying.transfer(msg.sender, amount);
     }
 
@@ -109,9 +151,9 @@ contract RecurringBond {
         if(deltaCycles > 0 && !isAuctionActive()) {
             rewardsAccrued = deltaCycles * rewardBudget * MANTISSA;
         }
-        uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued / totalSupply) : rewardIndexMantissa;
+        uint _rewardIndexMantissa = deposits > 0 ? rewardIndexMantissa + (rewardsAccrued / deposits) : rewardIndexMantissa;
         uint deltaIndex = _rewardIndexMantissa - accountIndexMantissa[user];
-        uint bal = balanceOf[user];
+        uint bal = balanceOf(user);
         uint accountDelta = bal * deltaIndex / MANTISSA;
         return (accruedRewards[user] + accountDelta);
     }
@@ -146,16 +188,16 @@ contract RecurringBond {
     }
 
     function getCurrentBondYield(uint amount) external view returns (uint) {
-        if (totalSupply == 0) return rewardBudget;
-        return rewardBudget * amount / totalSupply;
+        if (deposits == 0) return rewardBudget;
+        return rewardBudget * amount / deposits;
     }
 
     function transfer(address recipient, uint256 amount) external returns (bool) {
         updateIndex(msg.sender);
         updateIndex(recipient);
         require(recipient != address(0), "ERC20: transfer to the zero address");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[recipient] += amount;
+        balances[msg.sender] = balanceOf(msg.sender) - amount;
+        balances[recipient] = balanceOf(recipient) + amount;
         emit Transfer(msg.sender, recipient, amount);
         return true;
     }
@@ -172,8 +214,8 @@ contract RecurringBond {
         updateIndex(recipient);
         require(recipient != address(0), "ERC20: transfer to the zero address");
         allowance[sender][msg.sender] -= amount;
-        balanceOf[sender] -= amount;
-        balanceOf[recipient] += amount;
+        balances[sender] = balanceOf(sender) - amount;
+        balances[recipient] = balanceOf(recipient) + amount;
         emit Transfer(sender, recipient, amount);
         return true;
     }
