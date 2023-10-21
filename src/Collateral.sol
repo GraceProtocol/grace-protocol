@@ -29,9 +29,9 @@ contract Collateral {
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
 
-    constructor(ICollateralUnderlying _token) {
+    constructor(ICollateralUnderlying _token, address _core) {
         token = _token;
-        core = ICollateralCore(msg.sender);
+        core = ICollateralCore(_core);
     }
 
     modifier lock {

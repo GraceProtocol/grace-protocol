@@ -9,7 +9,6 @@ contract CoreTest is Test {
     Core public core;
 
     constructor() {
-        core = new Core(address(this));
     }
 
 }

@@ -33,9 +33,9 @@ contract Pool {
     mapping (address => uint) public balanceOf;
     mapping(address => uint) public debtSharesOf;
 
-    constructor(IPoolUnderlying _token) {
+    constructor(IPoolUnderlying _token, address _core) {
         token = _token;
-        core = IPoolCore(msg.sender);
+        core = IPoolCore(_core);
     }
 
     modifier lock {
