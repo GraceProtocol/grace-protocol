@@ -86,6 +86,7 @@ contract Core {
     mapping (address => IPool[]) public userPools;
     mapping (uint => uint) public supplyValueSemiWeeklyLowUsd;
     mapping (uint => uint) public dailyBorrowsUsd;
+    mapping (IPool => bool) public poolBorrowPaused;
     IPool[] public poolList;
     ICollateral[] public collateralList;
 
@@ -108,6 +109,7 @@ contract Core {
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
     function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner { dailyBorrowLimitUsd = _dailyBorrowLimitUsd; }
+    function setPoolBorrowPaused(IPool pool, bool paused) public onlyOwner { poolBorrowPaused[pool] = paused; }
 
     function globalLock(address caller) external {
         require(collateralsData[ICollateral(msg.sender)].enabled || poolsData[IPool(msg.sender)].enabled, "onlyCollateralsOrPools");
@@ -368,7 +370,7 @@ contract Core {
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
-
+        require(poolBorrowPaused[pool] == false, "borrowPaused");
         // if first borrow, add to userPools and poolUsers
         if(poolUsers[pool][caller] == false) {
             poolUsers[pool][caller] = true;
