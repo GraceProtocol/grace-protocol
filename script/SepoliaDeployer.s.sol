@@ -48,7 +48,7 @@ contract SepoliaDeployerScript is Script {
         // 8 decimal token
         address YEENUS = 0x93fCA4c6E2525C09c95269055B46f16b1459BF9d;
         // Deploy USDC pool (YEENUS)
-        address usdcPool = core.deployPool(YEENUS, address(usdcPriceFeed), 100000 * 1e6);
+        address usdcPool = core.deployPool("Grace USDC", "gUSDC", YEENUS, address(usdcPriceFeed), 100000 * 1e6);
 
         // Chainlink feed on Sepolia
         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
@@ -66,7 +66,7 @@ contract SepoliaDeployerScript is Script {
             usdcPool,
             "Grace USDC 1-week bond",
             "G-USDC-1W",
-            block.timestamp,
+            block.timestamp + 600, // after 10 minutes to leave time for the bond to be created
             7 days,
             1 days,
             1000 * 1e18

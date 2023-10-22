@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import "./Oracle.sol";
 
 interface IPoolDeployer {
-    function deployPool(address underlying) external returns (address pool);
+    function deployPool(string memory name, string memory symbol, address underlying) external returns (address pool);
 }
 
 interface ICollateralDeployer {
@@ -129,13 +129,12 @@ contract Core {
         lockDepth -= 1;
     }
 
-    function deployPool(address underlying, address feed, uint depositCap) public returns (address) {
-        require(msg.sender == owner, "onlyOwner");
+    function deployPool(string memory name, string memory symbol, address underlying, address feed, uint depositCap) public onlyOwner returns (address) {
         require(underlyingToPool[underlying] == IPool(address(0)), "underlyingAlreadyAdded");
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
-        IPool pool = IPool(poolDeployer.deployPool(underlying));
+        IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying));
         poolsData[pool] = PoolConfig({
             enabled: true,
             depositCap: depositCap
@@ -146,11 +145,14 @@ contract Core {
         return address(pool);
     }
 
-    function configPool(IPool pool, address feed, uint depositCap) public {
-        require(msg.sender == owner, "onlyOwner");
+    function setPoolFeed(IPool pool, address feed) public onlyOwner {
+        require(poolsData[pool].enabled == true, "poolNotAdded");
+        oracle.setPoolFeed(address(pool), feed);
+    }
+
+    function setPoolDepositCap(IPool pool, uint depositCap) public onlyOwner {
         require(poolsData[pool].enabled == true, "poolNotAdded");
         poolsData[pool].depositCap = depositCap;
-        oracle.setPoolFeed(address(pool.token()), feed);
     }
 
     function deployCollateral(
@@ -159,8 +161,7 @@ contract Core {
         uint collateralFactor,
         uint hardCapUsd,
         uint softCapBps
-        ) public returns (address) {
-        require(msg.sender == owner, "onlyOwner");
+        ) public onlyOwner returns (address) {
         require(underlyingToCollateral[underlying] == ICollateral(address(0)), "underlyingAlreadyAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
         require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
@@ -180,21 +181,26 @@ contract Core {
         return address(collateral);
     }
 
-    function configCollateral(
-        ICollateral collateral,
-        address feed,
-        uint collateralFactor,
-        uint hardCapUsd,
-        uint softCapBps
-        ) public {
-        require(msg.sender == owner, "onlyOwner");
+    function setCollateralFeed(ICollateral collateral, address feed) public onlyOwner {
+        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
+        oracle.setCollateralFeed(address(collateral.token()), feed);
+    }
+
+    function setCollateralFactor(ICollateral collateral, uint collateralFactor) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
-        require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
         collateralsData[collateral].collateralFactorBps = collateralFactor;
+    }
+
+    function setCollateralHardCap(ICollateral collateral, uint hardCapUsd) public onlyOwner {
+        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
         collateralsData[collateral].hardCap = hardCapUsd;
+    }
+
+    function setCollateralSoftCap(ICollateral collateral, uint softCapBps) public onlyOwner {
+        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
+        require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
         collateralsData[collateral].softCapBps = softCapBps;
-        oracle.setCollateralFeed(address(collateral.token()), feed);
     }
 
     function updateCollateralFeeController() external {
