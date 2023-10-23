@@ -9,7 +9,7 @@ interface IPoolCore {
     function updateInterestRateController() external;
     function globalLock(address caller) external;
     function globalUnlock() external;
-    function poolsData(address pool) external view returns (bool enabled, uint depositCap);
+    function poolsData(address pool) external view returns (bool enabled, uint depositCap, bool borrowPaused, bool borrowSuspended);
 }
 
 interface IPoolUnderlying {
@@ -79,7 +79,7 @@ contract Pool {
     }
 
     function maxDeposit(address) public view returns (uint256) {
-        (, uint depositCap) = core.poolsData(address(this));
+        (, uint depositCap,,) = core.poolsData(address(this));
         uint _totalAssets = totalAssets();
         if(_totalAssets >= depositCap) return 0;
         return depositCap - _totalAssets;

@@ -56,6 +56,8 @@ contract Core {
     struct PoolConfig {
         bool enabled;
         uint depositCap;
+        bool borrowPaused;
+        bool borrowSuspended;
     }
 
     IPoolDeployer public immutable poolDeployer;
@@ -76,6 +78,7 @@ contract Core {
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
     uint constant MAX_COLLATERAL_FACTOR_BPS = 1000000; // 10,000%
     uint public dailyBorrowLimitUsd = 100000e18; // $100,000
+    address public guardian;
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
     mapping (address => IPool) public underlyingToPool;
@@ -86,7 +89,6 @@ contract Core {
     mapping (address => IPool[]) public userPools;
     mapping (uint => uint) public supplyValueSemiWeeklyLowUsd;
     mapping (uint => uint) public dailyBorrowsUsd;
-    mapping (IPool => bool) public poolBorrowPaused;
     IPool[] public poolList;
     ICollateral[] public collateralList;
 
@@ -109,7 +111,16 @@ contract Core {
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
     function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner { dailyBorrowLimitUsd = _dailyBorrowLimitUsd; }
-    function setPoolBorrowPaused(IPool pool, bool paused) public onlyOwner { poolBorrowPaused[pool] = paused; }
+    function setGuardian(address _guardian) public onlyOwner { guardian = _guardian; }
+    function setPoolBorrowPaused(IPool pool, bool paused) public {
+        require(msg.sender == guardian || msg.sender == owner, "onlyGuardianOrOwner");
+        require(poolsData[pool].borrowSuspended == false, "borrowSuspended");
+        poolsData[pool].borrowPaused = paused;
+    }
+    function setPoolBorrowSuspended(IPool pool, bool suspended) public onlyOwner { 
+        poolsData[pool].borrowSuspended = suspended;
+        if(suspended) poolsData[pool].borrowPaused = true;
+    }
 
     function globalLock(address caller) external {
         require(collateralsData[ICollateral(msg.sender)].enabled || poolsData[IPool(msg.sender)].enabled, "onlyCollateralsOrPools");
@@ -139,7 +150,9 @@ contract Core {
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying));
         poolsData[pool] = PoolConfig({
             enabled: true,
-            depositCap: depositCap
+            depositCap: depositCap,
+            borrowPaused: false,
+            borrowSuspended: false
         });
         oracle.setPoolFeed(underlying, feed);
         poolList.push(pool);
@@ -370,7 +383,7 @@ contract Core {
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
-        require(poolBorrowPaused[pool] == false, "borrowPaused");
+        require(poolsData[pool].borrowPaused == false, "borrowPaused");
         // if first borrow, add to userPools and poolUsers
         if(poolUsers[pool][caller] == false) {
             poolUsers[pool][caller] = true;
