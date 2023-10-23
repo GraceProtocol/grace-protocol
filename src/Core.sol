@@ -51,6 +51,8 @@ contract Core {
         uint collateralFactorBps;
         uint hardCap;
         uint softCapBps;
+        bool depositPaused;
+        bool depositSuspended;
     }
 
     struct PoolConfig {
@@ -120,6 +122,15 @@ contract Core {
     function setPoolBorrowSuspended(IPool pool, bool suspended) public onlyOwner { 
         poolsData[pool].borrowSuspended = suspended;
         if(suspended) poolsData[pool].borrowPaused = true;
+    }
+    function setCollateralDepositPaused(ICollateral collateral, bool paused) public {
+        require(msg.sender == guardian || msg.sender == owner, "onlyGuardianOrOwner");
+        require(collateralsData[collateral].depositSuspended == false, "depositSuspended");
+        collateralsData[collateral].depositPaused = paused;
+    }
+    function setCollateralDepositSuspended(ICollateral collateral, bool suspended) public onlyOwner { 
+        collateralsData[collateral].depositSuspended = suspended;
+        if(suspended) collateralsData[collateral].depositPaused = true;
     }
 
     function globalLock(address caller) external {
@@ -269,6 +280,7 @@ contract Core {
     function onCollateralDeposit(address, address recipient, uint256 amount) external returns (bool) {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
+        require(collateralsData[collateral].depositPaused == false, "depositPaused");
         // find soft cap in usd terms
         uint softCapUsd = getSoftCapUsd(collateral, getSupplyValueWeeklyLow());
         uint capUsd = collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd;
