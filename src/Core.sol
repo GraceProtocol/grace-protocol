@@ -22,7 +22,7 @@ interface ICollateralFeeController {
 }
 
 interface IPool {
-    function token() external view returns (address);
+    function asset() external view returns (address);
     function getSupplied() external view returns (uint);
     function getDebtOf(address account) external view returns (uint);
     function repay(address to, uint amount) external;
@@ -31,7 +31,7 @@ interface IPool {
 }
 
 interface ICollateral {
-    function token() external view returns (address);
+    function asset() external view returns (address);
     function totalAssets() external view returns (uint);
     function getCollateralOf(address account) external view returns (uint256);
     function seize(address account, uint256 amount, address to) external;
@@ -213,7 +213,7 @@ contract Core {
 
     function setCollateralFeed(ICollateral collateral, address feed) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        oracle.setCollateralFeed(address(collateral.token()), feed);
+        oracle.setCollateralFeed(address(collateral.asset()), feed);
     }
 
     function setCollateralFactor(ICollateral collateral, uint collateralFactor) public onlyOwner {
@@ -377,7 +377,7 @@ contract Core {
         return maxCollateral;
     }
 
-    function onCollateralDeposit(address, address recipient, uint256 amount) external returns (bool) {
+    function onCollateralDeposit(address recipient, uint256 amount) external returns (bool) {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
         require(collateralsData[collateral].depositPaused == false, "depositPaused");
@@ -456,7 +456,7 @@ contract Core {
         return true;
     }
 
-    function onCollateralReceive(address recipient, uint) external returns (bool) {
+    function onCollateralReceive(address recipient) external returns (bool) {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
         if(collateralUsers[collateral][recipient] == false) {
@@ -495,7 +495,7 @@ contract Core {
         return collateralFeeController.getCollateralFeeBps(collateral);
     }
 
-    function onPoolDeposit(address, address, uint256 amount) external view returns (bool) {
+    function onPoolDeposit(uint256 amount) external view returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         require(pool.getSupplied() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
@@ -553,22 +553,22 @@ contract Core {
         return true;
     }
 
-    function onPoolRepay(address caller, address, uint256 amount) external returns (bool) {
+    function onPoolRepay(address recipient, uint256 amount) external returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
 
-        uint debt = pool.getDebtOf(caller);
+        uint debt = pool.getDebtOf(recipient);
 
         // if user repays all, remove from userPools and poolUsers
         if(amount == debt) {
-            for (uint i = 0; i < userPools[caller].length; i++) {
-                if(userPools[caller][i] == pool) {
-                    userPools[caller][i] = userPools[caller][userPools[caller].length - 1];
-                    userPools[caller].pop();
+            for (uint i = 0; i < userPools[recipient].length; i++) {
+                if(userPools[recipient][i] == pool) {
+                    userPools[recipient][i] = userPools[recipient][userPools[recipient].length - 1];
+                    userPools[recipient].pop();
                     break;
                 }
             }
-            poolUsers[pool][caller] = false;
+            poolUsers[pool][recipient] = false;
         }
 
         // reduce daily borrows
@@ -671,7 +671,7 @@ contract Core {
             // enforce max liquidation incentive
             require(collateralIncentiveUsd <= maxLiquidationIncentiveUsd, "maxLiquidationIncentiveExceeded");
 
-            IERC20 debtToken = IERC20(address(pool.token()));
+            IERC20 debtToken = IERC20(address(pool.asset()));
             debtToken.transferFrom(msg.sender, address(this), debtAmount);
             debtToken.approve(address(pool), debtAmount);
             pool.repay(borrower, debtAmount);

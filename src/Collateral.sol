@@ -2,9 +2,9 @@
 pragma solidity 0.8.21;
 
 interface ICollateralCore {
-    function onCollateralDeposit(address caller, address recipient, uint256 amount) external returns (bool);
+    function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
-    function onCollateralReceive(address recipient, uint amount) external returns (bool);
+    function onCollateralReceive(address recipient) external returns (bool);
     function getCollateralFeeBps(address collateral) external view returns (uint256, address);
     function updateCollateralFeeController() external;
     function globalLock(address caller) external;
@@ -162,7 +162,7 @@ contract Collateral {
 
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
         accrueFee();
-        require(core.onCollateralDeposit(msg.sender, recipient, assets), "beforeCollateralDeposit");
+        require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
@@ -208,7 +208,7 @@ contract Collateral {
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
         accrueFee();
         assets = previewMint(shares);
-        require(core.onCollateralDeposit(msg.sender, recipient, assets), "beforeCollateralDeposit");
+        require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
@@ -264,7 +264,7 @@ contract Collateral {
         uint assets = convertToAssets(shares);
         require(core.onCollateralWithdraw(msg.sender, assets), "beforeCollateralWithdraw");
         balanceOf[msg.sender] -= shares;
-        require(core.onCollateralReceive(recipient, assets), "beforeCollateralReceive");
+        require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
         balanceOf[recipient] += shares;
         emit Transfer(msg.sender, recipient, shares);
         return true;
@@ -276,7 +276,7 @@ contract Collateral {
         require(core.onCollateralWithdraw(sender, assets), "beforeCollateralWithdraw");
         balanceOf[sender] -= shares;
         allowance[sender][msg.sender] -= shares;
-        require(core.onCollateralReceive(recipient, assets), "beforeCollateralReceive");
+        require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
         balanceOf[recipient] += shares;
         emit Transfer(sender, recipient, shares);
         return true;

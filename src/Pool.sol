@@ -2,9 +2,9 @@
 pragma solidity 0.8.21;
 
 interface IPoolCore {
-    function onPoolDeposit(address caller, address recipient, uint256 amount) external returns (bool);
+    function onPoolDeposit(uint256 amount) external returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
-    function onPoolRepay(address caller, address to, uint256 amount) external returns (bool);
+    function onPoolRepay(address caller, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool) external view returns (uint256, address);
     function updateInterestRateController() external;
     function globalLock(address caller) external;
@@ -157,7 +157,7 @@ contract Pool {
     }
 
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
-        require(core.onPoolDeposit(msg.sender, recipient, assets), "beforePoolDeposit");
+        require(core.onPoolDeposit(assets), "beforePoolDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
@@ -200,7 +200,7 @@ contract Pool {
 
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
         assets = previewMint(shares);
-        require(core.onPoolDeposit(msg.sender, recipient, assets), "beforePoolDeposit");
+        require(core.onPoolDeposit(assets), "beforePoolDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
@@ -315,7 +315,7 @@ contract Pool {
 
     function repay(address to, uint amount) public lock {
         accrueInterest();
-        require(core.onPoolRepay(msg.sender, to, amount), "beforePoolRepay");
+        require(core.onPoolRepay(to, amount), "beforePoolRepay");
         uint debtShares;
         if(amount == type(uint256).max) {
             debtShares = debtSharesOf[msg.sender];
