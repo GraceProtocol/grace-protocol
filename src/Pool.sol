@@ -37,7 +37,6 @@ contract Pool {
     uint public lastBorrowRate;
     uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
-    uint constant sqrtMaxUint = 340282366920938463463374607431768211455;
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint)) public allowance;
     mapping(address => uint) public debtSharesOf;
@@ -164,6 +163,7 @@ contract Pool {
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
+        emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
     }
 
@@ -205,6 +205,7 @@ contract Pool {
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
+        emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
     }
 
@@ -231,6 +232,7 @@ contract Pool {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -258,6 +260,7 @@ contract Pool {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 

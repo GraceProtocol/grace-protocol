@@ -8,7 +8,7 @@ interface IPoolDeployer {
 }
 
 interface ICollateralDeployer {
-    function deployCollateral(address underlying) external returns (address collateral);
+    function deployCollateral(string memory name, string memory symbol, address underlying) external returns (address collateral);
 }
 
 interface IInterestRateController {
@@ -32,7 +32,7 @@ interface IPool {
 
 interface ICollateral {
     function token() external view returns (address);
-    function getTotalCollateral() external view returns (uint);
+    function totalAssets() external view returns (uint);
     function getCollateralOf(address account) external view returns (uint256);
     function seize(address account, uint256 amount, address to) external;
     function pull(address _stuckToken, address dst, uint amount) external;
@@ -182,6 +182,8 @@ contract Core {
     }
 
     function deployCollateral(
+        string memory name,
+        string memory symbol,
         address underlying,
         address feed,
         uint collateralFactor,
@@ -194,12 +196,14 @@ contract Core {
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
-        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(underlying));
+        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(name, symbol, underlying));
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
             hardCap: hardCapUsd,
-            softCapBps: softCapBps
+            softCapBps: softCapBps,
+            depositPaused: false,
+            depositSuspended: false
         });
         oracle.setCollateralFeed(underlying, feed);
         collateralList.push(collateral);
@@ -233,12 +237,12 @@ contract Core {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "onlyCollaterals");
         uint weekLow = getSupplyValueWeeklyLow();
-        uint sofCapUsd = getSoftCapUsd(collateral, weekLow);
-        uint capUsd = collateralsData[collateral].hardCap < sofCapUsd ? collateralsData[collateral].hardCap : sofCapUsd;
+        uint softCapUsd = getSoftCapUsd(collateral, weekLow);
+        uint capUsd = collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd;
         uint price = oracle.getCollateralPriceMantissa(
             address(collateral),
             collateralsData[collateral].collateralFactorBps,
-            collateral.getTotalCollateral(),
+            collateral.totalAssets(),
             capUsd
         );
         collateralFeeController.update(address(collateral), price, capUsd);
@@ -250,6 +254,17 @@ contract Core {
             IPool pool = poolList[i];
             uint supplied = pool.getSupplied();
             uint price = oracle.getDebtPriceMantissa(address(pool));
+            totalValueUsd += supplied * price / MANTISSA;
+        }
+        return totalValueUsd;
+    }
+
+    function viewSupplyValueUsd() internal view returns (uint256) {
+        uint totalValueUsd = 0;
+        for (uint i = 0; i < poolList.length; i++) {
+            IPool pool = poolList[i];
+            uint supplied = pool.getSupplied();
+            uint price = oracle.viewDebtPriceMantissa(address(pool));
             totalValueUsd += supplied * price / MANTISSA;
         }
         return totalValueUsd;
@@ -273,8 +288,93 @@ contract Core {
         return supplyValueWeeklyLow;
     }
 
+    function viewSupplyValueWeeklyLow() internal view returns (uint) {
+        uint currentSupplyValueUsd = viewSupplyValueUsd();
+        uint semiWeek = block.timestamp / 0.5 weeks;
+        uint semiWeekLow = supplyValueSemiWeeklyLowUsd[semiWeek];
+        if(semiWeekLow == 0 || currentSupplyValueUsd < semiWeekLow) {
+            semiWeekLow = currentSupplyValueUsd;
+        }
+        uint lastSemiWeekLow = supplyValueSemiWeeklyLowUsd[semiWeek - 1];
+        uint supplyValueWeeklyLow =  lastSemiWeekLow < semiWeekLow && lastSemiWeekLow > 0 ? lastSemiWeekLow : semiWeekLow;
+        return supplyValueWeeklyLow;
+    }
+
     function getSoftCapUsd(ICollateral collateral, uint weekLow) internal view returns (uint) {
         return weekLow * collateralsData[collateral].softCapBps / 10000;
+    }
+
+    function maxCollateralDeposit(ICollateral collateral) external view returns (uint) {
+        if(collateralsData[collateral].enabled == false) return 0;
+        if(collateralsData[collateral].depositPaused == true) return 0;
+        // find soft cap in usd terms
+        uint softCapUsd = getSoftCapUsd(collateral, viewSupplyValueWeeklyLow());
+        uint capUsd = collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd;
+        uint totalAssets = collateral.totalAssets();
+        // get oracle price
+        uint price = oracle.viewCollateralPriceMantissa(
+            address(collateral),
+            collateralsData[collateral].collateralFactorBps,
+            totalAssets,
+            capUsd
+        );
+        uint totalValue = totalAssets * price / MANTISSA;
+        if(totalValue >= capUsd) return 0;
+        uint remainingValue = capUsd - totalValue;
+        uint remainingDeposits = remainingValue * MANTISSA / price;
+        return remainingDeposits;
+    }
+
+    function maxCollateralWithdraw(ICollateral collateral, address account) external view returns (uint) {
+        if(collateralsData[collateral].enabled == false) return 0;
+        if(collateralsData[collateral].depositPaused == true) return 0;
+        
+        uint bal = collateral.getCollateralOf(account);
+        
+        // calculate liabilities
+        uint liabilitiesUsd = 0;
+        for (uint i = 0; i < userPools[account].length; i++) {
+            IPool pool = userPools[account][i];
+            uint debt = pool.getDebtOf(account);
+            uint price = oracle.viewDebtPriceMantissa(address(pool));
+            uint debtUsd = debt * price / MANTISSA;
+            liabilitiesUsd += debtUsd;
+        }
+
+        if(liabilitiesUsd == 0) return bal;
+
+        // calculate assets
+        uint assetsUsd = 0;
+        uint weekLow = viewSupplyValueWeeklyLow();
+        for (uint i = 0; i < userCollaterals[account].length; i++) {
+            ICollateral thisCollateral = userCollaterals[account][i];
+            uint softCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+            uint capUsd = collateralsData[thisCollateral].hardCap < softCapUsd ? collateralsData[thisCollateral].hardCap : softCapUsd;
+            uint price = oracle.viewCollateralPriceMantissa(
+                address(thisCollateral),
+                collateralsData[thisCollateral].collateralFactorBps,
+                thisCollateral.totalAssets(),
+                capUsd
+            );
+            uint thisCollateralBalance = collateral.getCollateralOf(account);
+            uint thisCollateralUsd = thisCollateralBalance * collateralsData[thisCollateral].collateralFactorBps * price / 10000 / MANTISSA;
+            assetsUsd += thisCollateralUsd;
+        }
+
+        if(assetsUsd <= liabilitiesUsd) return 0;
+        uint deltaUsd = assetsUsd - liabilitiesUsd;
+        uint collateralFactorBps = collateralsData[collateral].collateralFactorBps;
+        uint _softCapUsd = getSoftCapUsd(collateral, weekLow);
+        uint _capUsd = collateralsData[collateral].hardCap < _softCapUsd ? collateralsData[collateral].hardCap : _softCapUsd;
+        uint _price = oracle.viewCollateralPriceMantissa(
+            address(collateral),
+            collateralFactorBps,
+            collateral.totalAssets(),
+            _capUsd
+        );
+        uint deltaCollateral = deltaUsd * MANTISSA * 10000 / _price / collateralFactorBps;
+        uint maxCollateral = bal > deltaCollateral ? deltaCollateral : bal;
+        return maxCollateral;
     }
 
     function onCollateralDeposit(address, address recipient, uint256 amount) external returns (bool) {
@@ -288,11 +388,11 @@ contract Core {
         uint price = oracle.getCollateralPriceMantissa(
             address(collateral),
             collateralsData[collateral].collateralFactorBps,
-            collateral.getTotalCollateral(),
+            collateral.totalAssets(),
             capUsd
             );
         // enforce both caps
-        uint totalCollateralAfter = collateral.getTotalCollateral() + amount;
+        uint totalCollateralAfter = collateral.totalAssets() + amount;
         uint totalValueAfter = totalCollateralAfter * price / MANTISSA;
         require(totalValueAfter <= collateralsData[collateral].hardCap, "hardCapExceeded");
         require(totalValueAfter <= softCapUsd, "softCapExceeded");
@@ -324,12 +424,12 @@ contract Core {
             uint weekLow = getSupplyValueWeeklyLow();
             for (uint i = 0; i < userCollaterals[caller].length; i++) {
                 ICollateral thisCollateral = userCollaterals[caller][i];
-                uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
-                uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+                uint softCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+                uint capUsd = collateralsData[thisCollateral].hardCap < softCapUsd ? collateralsData[thisCollateral].hardCap : softCapUsd;
                 uint price = oracle.getCollateralPriceMantissa(
                     address(thisCollateral),
                     collateralsData[thisCollateral].collateralFactorBps,
-                    thisCollateral.getTotalCollateral(),
+                    thisCollateral.totalAssets(),
                     capUsd
                 );
                 uint thisCollateralBalance = collateral.getCollateralOf(caller);
@@ -352,6 +452,16 @@ contract Core {
                 }
             }
             collateralUsers[collateral][caller] = false;
+        }
+        return true;
+    }
+
+    function onCollateralReceive(address recipient, uint) external returns (bool) {
+        ICollateral collateral = ICollateral(msg.sender);
+        require(collateralsData[collateral].enabled, "collateralNotEnabled");
+        if(collateralUsers[collateral][recipient] == false) {
+            collateralUsers[collateral][recipient] = true;
+            userCollaterals[recipient].push(collateral);
         }
         return true;
     }
@@ -407,12 +517,12 @@ contract Core {
         uint weekLow = getSupplyValueWeeklyLow();
         for (uint i = 0; i < userCollaterals[caller].length; i++) {
             ICollateral thisCollateral = userCollaterals[caller][i];
-            uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
-            uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+            uint softCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+            uint capUsd = collateralsData[thisCollateral].hardCap < softCapUsd ? collateralsData[thisCollateral].hardCap : softCapUsd;
             uint price = oracle.getCollateralPriceMantissa(
                 address(thisCollateral),
                 collateralsData[thisCollateral].collateralFactorBps,
-                thisCollateral.getTotalCollateral(),
+                thisCollateral.totalAssets(),
                 capUsd
             );
             uint thisCollateralBalance = thisCollateral.getCollateralOf(caller);
@@ -518,18 +628,18 @@ contract Core {
                 uint collateralBalanceUsd = collateral.getCollateralOf(borrower) * oracle.getCollateralPriceMantissa(
                     address(collateral),
                     collateralsData[collateral].collateralFactorBps,
-                    collateral.getTotalCollateral(),
+                    collateral.totalAssets(),
                     collateralsData[collateral].hardCap < getSoftCapUsd(collateral, weekLow) ? collateralsData[collateral].hardCap : getSoftCapUsd(collateral, weekLow)
                 ) / MANTISSA;
 
                 for (uint i = 0; i < userCollaterals[borrower].length; i++) {
                     ICollateral thisCollateral = userCollaterals[borrower][i];
-                    uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
-                    uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+                    uint softCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+                    uint capUsd = collateralsData[thisCollateral].hardCap < softCapUsd ? collateralsData[thisCollateral].hardCap : softCapUsd;
                     uint price = oracle.getCollateralPriceMantissa(
                         address(thisCollateral),
                         collateralsData[thisCollateral].collateralFactorBps,
-                        thisCollateral.getTotalCollateral(),
+                        thisCollateral.totalAssets(),
                         capUsd
                     );
                     uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
@@ -550,7 +660,7 @@ contract Core {
             uint collateralPrice = oracle.getCollateralPriceMantissa(
                 address(collateral),
                 collateralsData[collateral].collateralFactorBps,
-                collateral.getTotalCollateral(),
+                collateral.totalAssets(),
                 collateralsData[collateral].hardCap < getSoftCapUsd(collateral, weekLow) ? collateralsData[collateral].hardCap : getSoftCapUsd(collateral, weekLow)
             );
             uint collateralAmount = debtValue * MANTISSA / collateralPrice;
@@ -599,12 +709,12 @@ contract Core {
         uint weekLow = getSupplyValueWeeklyLow();
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
             ICollateral thisCollateral = userCollaterals[borrower][i];
-            uint sofCapUsd = getSoftCapUsd(thisCollateral, weekLow);
-            uint capUsd = collateralsData[thisCollateral].hardCap < sofCapUsd ? collateralsData[thisCollateral].hardCap : sofCapUsd;
+            uint softCapUsd = getSoftCapUsd(thisCollateral, weekLow);
+            uint capUsd = collateralsData[thisCollateral].hardCap < softCapUsd ? collateralsData[thisCollateral].hardCap : softCapUsd;
             uint price = oracle.getCollateralPriceMantissa(
                 address(thisCollateral),
                 collateralsData[thisCollateral].collateralFactorBps,
-                thisCollateral.getTotalCollateral(),
+                thisCollateral.totalAssets(),
                 capUsd
             );
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);

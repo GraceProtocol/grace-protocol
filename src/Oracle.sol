@@ -111,6 +111,62 @@ contract Oracle {
         return 0;
     }
 
+    /// TODO: implement these functions
+    function viewCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256) {
+        address feed = collateralFeeds[token];
+        if(feed != address(0)) {
+            // get normalized price, then cap it
+            uint normalizedPrice = getCappedPrice(
+                getNormalizedPrice(
+                    token,
+                    feed
+                ),
+                IOracleERC20(token).decimals(),
+                totalCollateral,
+                capUsd
+            );
+            uint day = block.timestamp / 1 days;
+            uint todaysLow = dailyLows[token][day];
+            if(todaysLow == 0 || normalizedPrice < todaysLow) {
+                todaysLow = normalizedPrice;
+            }
+            // if collateralFactorBps is 0, return normalizedPrice;
+            if(collateralFactorBps == 0) return normalizedPrice;
+            // get yesterday's low
+            uint yesterdaysLow = dailyLows[token][day - 1];
+            // calculate new borrowing power based on collateral factor
+            uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
+            uint twoDayLow = todaysLow > yesterdaysLow && yesterdaysLow > 0 ? yesterdaysLow : todaysLow;
+            if(twoDayLow > 0 && newBorrowingPower > twoDayLow) {
+                uint dampenedPrice = twoDayLow * 10000 / collateralFactorBps;
+                return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
+            }
+            return normalizedPrice;
+        }
+        return 0;
+
+    }
+    function viewDebtPriceMantissa(address token) external view returns (uint256) {
+        address feed = poolFeeds[token];
+        if(feed != address(0)) {
+            // get normalized price
+            uint normalizedPrice = getNormalizedPrice(token, feed);
+            // potentially store price as today's high
+            uint day = block.timestamp / 1 days;
+            uint todaysHigh = dailyHighs[token][day];
+            if(normalizedPrice > todaysHigh) {
+                todaysHigh = normalizedPrice;
+            }
+            // get yesterday's high
+            uint yesterdaysHigh = dailyHighs[token][day - 1];
+            // find the higher of the two
+            uint twoDayHigh = todaysHigh > yesterdaysHigh ? todaysHigh : yesterdaysHigh;
+            // if the higher of the two is greater than the normalized price, return the higher of the two
+            return twoDayHigh > normalizedPrice ? twoDayHigh : normalizedPrice;
+        }
+        return 0;
+    }
+    
     event RecordDailyLow(address indexed token, uint price);
     event RecordDailyHigh(address indexed token, uint price);
 

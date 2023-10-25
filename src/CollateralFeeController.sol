@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 interface ICollateral {
-    function getTotalCollateral() external view returns (uint256);
+    function totalAssets() external view returns (uint256);
 }
 
 interface ICore {
@@ -40,7 +40,7 @@ contract CollateralFeeController {
         require(msg.sender == core, "onlyCore");
         {
             ICollateral collateralContract = ICollateral(collateral);
-            uint deposited = collateralContract.getTotalCollateral();
+            uint deposited = collateralContract.totalAssets();
             uint depositedUsd = deposited * collateralPriceMantissa / MANTISSA;
             uint currentUtilBps = 10000;
             if (capUsd > 0) currentUtilBps = depositedUsd * 10000 / capUsd;

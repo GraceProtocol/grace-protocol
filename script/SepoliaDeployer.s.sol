@@ -55,7 +55,7 @@ contract SepoliaDeployerScript is Script {
         // WETH address used by Uniswap on Sepolia
         address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
         // Deploy WETH collateral
-        core.deployCollateral(weth, ethFeed, 8500, 1_000_000 ether, 2000);
+        core.deployCollateral("Grace Collateral WETH", "gcWETH", weth, ethFeed, 8500, 1_000_000 ether, 2000);
         
         // Deploy Bond Factory
         BondFactory bondFactory = new BondFactory(address(grace), deployer);
