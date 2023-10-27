@@ -13,8 +13,9 @@ import {Timelock} from "src/Timelock.sol";
 import {GovernorAlpha} from "src/GovernorAlpha.sol";
 import {FixedPriceFeed} from "src/FixedPriceFeed.sol";
 import {BondFactory} from "src/BondFactory.sol";
+import {EthHelper} from "src/EthHelper.sol";
 
-contract SepoliaDeployerScript is Script {
+contract MainnetDeployerScript is Script {
     function setUp() public {}
 
     function run() public {
@@ -42,7 +43,11 @@ contract SepoliaDeployerScript is Script {
         Reserve reserve = new Reserve(IERC20(address(grace)), address(timelock));
         // Set reserve as fee destination
         core.setFeeDestination(address(reserve));
-        
+        // WETH address used by Uniswap on Sepolia
+        address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
+        // deploy EthHelper
+        new EthHelper(weth);
+
         // Deploy fixed price USDC feed
         FixedPriceFeed usdcPriceFeed = new FixedPriceFeed(8, 100000000);
         // 8 decimal token
@@ -52,8 +57,6 @@ contract SepoliaDeployerScript is Script {
 
         // Chainlink feed on Sepolia
         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
-        // WETH address used by Uniswap on Sepolia
-        address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
         // Deploy WETH collateral
         core.deployCollateral("Grace Collateral WETH", "gcWETH", weth, ethFeed, 8500, 1_000_000 ether, 2000);
         

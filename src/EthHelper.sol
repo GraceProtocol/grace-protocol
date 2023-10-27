@@ -37,8 +37,8 @@ contract EthHelper {
 
     IWETH public immutable weth;
     
-    constructor(IWETH _weth) {
-        weth = _weth;
+    constructor(address _weth) {
+        weth = IWETH(_weth);
     }
 
     modifier onlyWethPools(address pool) {
