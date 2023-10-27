@@ -157,16 +157,21 @@ contract RecurringBond {
         emit Preorder(msg.sender, recipient, amount);
     }
 
-    function cancelPreorder(uint amount) external {
-        updateIndex(msg.sender);
+    function cancelPreorder(uint amount, address recipient, address owner) external {
+        updateIndex(owner);
         require(!isAuctionActive(), "auction is active");
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - amount;
+        }
         uint currentCycle = getCycle();
-        accountCyclePreorder[msg.sender][currentCycle] -= amount;
+        accountCyclePreorder[owner][currentCycle] -= amount;
         cyclePreorders[currentCycle] -= amount;
-        balances[msg.sender] -= amount;
+        balances[owner] -= amount;
         deposits -= amount;
-        asset.transfer(msg.sender, amount);
-        emit CancelPreorder(msg.sender, amount);
+        asset.transfer(recipient, amount);
+        emit CancelPreorder(msg.sender, recipient, owner, amount);
     }
 
     function claimable(address user) public view returns(uint) {
@@ -278,7 +283,7 @@ contract RecurringBond {
     event Deposit(address indexed caller, address indexed owner, uint amount);
     event Withdraw(address indexed owner, uint amount);
     event Preorder(address indexed caller, address indexed owner, uint amount);
-    event CancelPreorder(address indexed owner, uint amount);
+    event CancelPreorder(address indexed caller, address indexed recipient, address indexed owner, uint amount);
     event Claim(address indexed owner, uint amount);
     event SetBudget(uint rewardBudget);
 }

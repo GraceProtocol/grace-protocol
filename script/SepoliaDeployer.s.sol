@@ -13,7 +13,7 @@ import {Timelock} from "src/Timelock.sol";
 import {GovernorAlpha} from "src/GovernorAlpha.sol";
 import {FixedPriceFeed} from "src/FixedPriceFeed.sol";
 import {BondFactory} from "src/BondFactory.sol";
-import {EthHelper} from "src/EthHelper.sol";
+import {Helper} from "src/Helper.sol";
 
 interface IERC20Metadata {
     function symbol() external view returns (string memory);
@@ -49,8 +49,8 @@ contract MainnetDeployerScript is Script {
         core.setFeeDestination(address(reserve));
         // WETH address used by Uniswap on Sepolia
         address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
-        // deploy EthHelper
-        new EthHelper(weth);
+        // deploy Helper
+        new Helper(weth);
         // Deploy Bond Factory
         BondFactory bondFactory = new BondFactory(address(grace), deployer);
         // Set Bond Factory as Grace minter
