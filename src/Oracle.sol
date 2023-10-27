@@ -13,10 +13,11 @@ interface IOracleERC20 {
 contract Oracle {
 
     address public immutable core;
+    uint constant WEEK = 7 days;
     mapping(address => address) public collateralFeeds;
     mapping(address => address) public poolFeeds;
-    mapping (address => mapping(uint => uint)) public dailyLows; // token => day => price
-    mapping (address => mapping(uint => uint)) public dailyHighs; // token => day => price
+    mapping (address => mapping(uint => uint)) public weeklyLows; // token => week => price
+    mapping (address => mapping(uint => uint)) public weeklyHighs; // token => week => price
 
     constructor() {
         core = msg.sender;
@@ -63,24 +64,24 @@ contract Oracle {
                 totalCollateral,
                 capUsd
             );
-            // potentially store price as today's low
-            uint day = block.timestamp / 1 days;
-            uint todaysLow = dailyLows[token][day];
-            if(todaysLow == 0 || normalizedPrice < todaysLow) {
-                dailyLows[token][day] = normalizedPrice;
-                todaysLow = normalizedPrice;
-                emit RecordDailyLow(token, normalizedPrice);
+            // potentially store price as this week's low
+            uint week = block.timestamp / WEEK;
+            uint weekLow = weeklyLows[token][week];
+            if(weekLow == 0 || normalizedPrice < weekLow) {
+                weeklyLows[token][week] = normalizedPrice;
+                weekLow = normalizedPrice;
+                emit RecordWeeklyLow(token, normalizedPrice);
             }
             
             // if collateralFactorBps is 0, return normalizedPrice;
             if(collateralFactorBps == 0) return normalizedPrice;
-            // get yesterday's low
-            uint yesterdaysLow = dailyLows[token][day - 1];
+            // get last week's low
+            uint lastWeekLow = weeklyLows[token][week - 1];
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
-            uint twoDayLow = todaysLow > yesterdaysLow && yesterdaysLow > 0 ? yesterdaysLow : todaysLow;
-            if(twoDayLow > 0 && newBorrowingPower > twoDayLow) {
-                uint dampenedPrice = twoDayLow * 10000 / collateralFactorBps;
+            uint twoWeekLow = weekLow > lastWeekLow && weekLow > 0 ? lastWeekLow : weekLow;
+            if(twoWeekLow > 0 && newBorrowingPower > twoWeekLow) {
+                uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
                 return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
             }
             return normalizedPrice;
@@ -93,20 +94,20 @@ contract Oracle {
         if(feed != address(0)) {
             // get normalized price
             uint normalizedPrice = getNormalizedPrice(token, feed);
-            // potentially store price as today's high
-            uint day = block.timestamp / 1 days;
-            uint todaysHigh = dailyHighs[token][day];
-            if(normalizedPrice > todaysHigh) {
-                dailyHighs[token][day] = normalizedPrice;
-                todaysHigh = normalizedPrice;
-                emit RecordDailyHigh(token, normalizedPrice);
+            // potentially store price as this week's high
+            uint week = block.timestamp / WEEK;
+            uint weekHigh = weeklyHighs[token][week];
+            if(normalizedPrice > weekHigh) {
+                weeklyHighs[token][week] = normalizedPrice;
+                weekHigh = normalizedPrice;
+                emit RecordWeeklyHigh(token, normalizedPrice);
             }
-            // get yesterday's high
-            uint yesterdaysHigh = dailyHighs[token][day - 1];
+            // get last week's high
+            uint lastWeekHigh = weeklyHighs[token][week - 1];
             // find the higher of the two
-            uint twoDayHigh = todaysHigh > yesterdaysHigh ? todaysHigh : yesterdaysHigh;
+            uint twoWeekHigh = weekHigh > lastWeekHigh ? weekHigh : lastWeekHigh;
             // if the higher of the two is greater than the normalized price, return the higher of the two
-            return twoDayHigh > normalizedPrice ? twoDayHigh : normalizedPrice;
+            return twoWeekHigh > normalizedPrice ? twoWeekHigh : normalizedPrice;
         }
         return 0;
     }
@@ -125,20 +126,20 @@ contract Oracle {
                 totalCollateral,
                 capUsd
             );
-            uint day = block.timestamp / 1 days;
-            uint todaysLow = dailyLows[token][day];
-            if(todaysLow == 0 || normalizedPrice < todaysLow) {
-                todaysLow = normalizedPrice;
+            uint week = block.timestamp / WEEK;
+            uint weekLow = weeklyLows[token][week];
+            if(weekLow == 0 || normalizedPrice < weekLow) {
+                weekLow = normalizedPrice;
             }
             // if collateralFactorBps is 0, return normalizedPrice;
             if(collateralFactorBps == 0) return normalizedPrice;
-            // get yesterday's low
-            uint yesterdaysLow = dailyLows[token][day - 1];
+            // get last week's low
+            uint lastWeekLow = weeklyLows[token][week - 1];
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
-            uint twoDayLow = todaysLow > yesterdaysLow && yesterdaysLow > 0 ? yesterdaysLow : todaysLow;
-            if(twoDayLow > 0 && newBorrowingPower > twoDayLow) {
-                uint dampenedPrice = twoDayLow * 10000 / collateralFactorBps;
+            uint twoWeekLow = weekLow > lastWeekLow && lastWeekLow > 0 ? lastWeekLow : weekLow;
+            if(twoWeekLow > 0 && newBorrowingPower > twoWeekLow) {
+                uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
                 return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
             }
             return normalizedPrice;
@@ -151,23 +152,23 @@ contract Oracle {
         if(feed != address(0)) {
             // get normalized price
             uint normalizedPrice = getNormalizedPrice(token, feed);
-            // potentially store price as today's high
-            uint day = block.timestamp / 1 days;
-            uint todaysHigh = dailyHighs[token][day];
-            if(normalizedPrice > todaysHigh) {
-                todaysHigh = normalizedPrice;
+            // potentially store price as this week's high
+            uint week = block.timestamp / WEEK;
+            uint weekHigh = weeklyHighs[token][week];
+            if(normalizedPrice > weekHigh) {
+                weekHigh = normalizedPrice;
             }
-            // get yesterday's high
-            uint yesterdaysHigh = dailyHighs[token][day - 1];
+            // get last week's high
+            uint lastWeekHigh = weeklyHighs[token][week - 1];
             // find the higher of the two
-            uint twoDayHigh = todaysHigh > yesterdaysHigh ? todaysHigh : yesterdaysHigh;
+            uint twoWeekHigh = weekHigh > lastWeekHigh ? weekHigh : lastWeekHigh;
             // if the higher of the two is greater than the normalized price, return the higher of the two
-            return twoDayHigh > normalizedPrice ? twoDayHigh : normalizedPrice;
+            return twoWeekHigh > normalizedPrice ? twoWeekHigh : normalizedPrice;
         }
         return 0;
     }
     
-    event RecordDailyLow(address indexed token, uint price);
-    event RecordDailyHigh(address indexed token, uint price);
+    event RecordWeeklyLow(address indexed token, uint price);
+    event RecordWeeklyHigh(address indexed token, uint price);
 
 }
