@@ -15,6 +15,10 @@ import {FixedPriceFeed} from "src/FixedPriceFeed.sol";
 import {BondFactory} from "src/BondFactory.sol";
 import {EthHelper} from "src/EthHelper.sol";
 
+interface IERC20Metadata {
+    function symbol() external view returns (string memory);
+}
+
 contract MainnetDeployerScript is Script {
     function setUp() public {}
 
@@ -47,33 +51,22 @@ contract MainnetDeployerScript is Script {
         address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
         // deploy EthHelper
         new EthHelper(weth);
+        // Deploy Bond Factory
+        BondFactory bondFactory = new BondFactory(address(grace), deployer);
+        // Set Bond Factory as Grace minter
+        grace.setMinter(address(bondFactory), type(uint).max, 1000 * 1e18);
 
         // Deploy fixed price USDC feed
         FixedPriceFeed usdcPriceFeed = new FixedPriceFeed(8, 100000000);
         // 8 decimal token
         address YEENUS = 0x93fCA4c6E2525C09c95269055B46f16b1459BF9d;
         // Deploy USDC pool (YEENUS)
-        address usdcPool = core.deployPool("Grace USDC", "gUSDC", YEENUS, address(usdcPriceFeed), 100000 * 1e6);
+        address usdcPool = deployPool(core, bondFactory, YEENUS, address(usdcPriceFeed), 1_000_000 * 1e8);
 
         // Chainlink feed on Sepolia
         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
         // Deploy WETH collateral
-        core.deployCollateral("Grace Collateral WETH", "gcWETH", weth, ethFeed, 8500, 1_000_000 ether, 2000);
-        
-        // Deploy Bond Factory
-        BondFactory bondFactory = new BondFactory(address(grace), deployer);
-        // Set Bond Factory as Grace minter
-        grace.setMinter(address(bondFactory), type(uint).max, 1000 * 1e18);
-        // Create USDC pool bond
-        bondFactory.createBond(
-            usdcPool,
-            "Grace USDC 1-week bond",
-            "G-USDC-1W",
-            block.timestamp + 600, // after 10 minutes to leave time for the bond to be created
-            7 days,
-            1 days,
-            1000 * 1e18
-        );
+        address wethCollateral = deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
 
         // Set BondFactory operator to timelock
         bondFactory.setOperator(address(timelock));
@@ -92,5 +85,45 @@ contract MainnetDeployerScript is Script {
         governor.__acceptAdmin();
 
         vm.stopBroadcast();
+    }
+
+    function deployPool(
+        Core core,
+        BondFactory bondFactory, // if address(0), no bond will be created
+        address asset,
+        address feed,
+        uint depositCap) public returns (address pool, address bond) {
+        string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
+        string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
+        pool = core.deployPool(name, symbol, asset, feed, depositCap);
+        if(address(bondFactory) != address(0)) {
+            string memory bondName = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " 1-week bond"));
+            string memory bondSymbol = string(abi.encodePacked("gb", IERC20Metadata(asset).symbol(), "-1W"));
+            uint bondStart = block.timestamp + 600; // after 10 minutes to leave time for the bond to be created
+            uint bondDuration = 7 days;
+            uint auctionDuration = 1 days;
+            uint initialBudget = 1000 * 1e18;
+            bond = bondFactory.createBond(
+                pool,
+                bondName,
+                bondSymbol,
+                bondStart,
+                bondDuration,
+                auctionDuration,
+                initialBudget
+            );
+        }
+    }
+
+    function deployCollateral(
+        Core core,
+        address underlying,
+        address feed,
+        uint collateralFactorBps,
+        uint hardCapUsd,
+        uint softCapBps) public returns (address) {
+        string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(underlying).symbol(), " Collateral"));
+        string memory symbol = string(abi.encodePacked("gc", IERC20Metadata(underlying).symbol()));
+        return core.deployCollateral(name, symbol, underlying, feed, collateralFactorBps, hardCapUsd, softCapBps);
     }
 }
