@@ -310,13 +310,19 @@ contract Pool {
         try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
-        uint shares = interest * totalSupply / (totalAssets());
+        uint shares = convertToDebtShares(interest);
         if(shares == 0) return;
         lastAccrued = block.timestamp;
         totalDebt += interest;
         debtSupply += shares;
         lastBorrowRate = borrowRateBps;
         debtSharesOf[borrowRateDestination] += shares;
+    }
+
+    function previewBorrow(uint256 assets) public view returns (uint256) {
+        uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
+
+        return supply == 0 ? assets : mulDivDown(assets, debtSupply, totalDebt);
     }
 
     function borrow(uint256 amount, address owner, address recipient) public lock {
@@ -329,12 +335,7 @@ contract Pool {
             if (allowed != type(uint256).max) borrowAllowance[owner][msg.sender] = allowed - amount;
         }
         uint debtShares;
-        if(debtSupply == 0) {
-            debtShares = amount;
-        } else {
-            debtShares = amount * debtSupply / totalDebt;
-        }
-        require(debtShares > 0, "zeroShares");
+        require((debtShares = previewBorrow(amount)) != 0, "zeroShares");
         debtSharesOf[owner] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
@@ -342,17 +343,19 @@ contract Pool {
         lastBalance = asset.balanceOf(address(this));
     }
 
+    function previewRepay(uint256 assets) public view returns (uint256) {
+        uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
+
+        return supply == 0 ? assets : mulDivUp(assets, debtSupply, totalDebt);
+    }
+
     function repay(address to, uint amount) public lock {
         accrueInterest();
         require(core.onPoolRepay(to, amount), "beforePoolRepay");
+        if(amount == type(uint256).max) amount = getDebtOf(to);
         uint debtShares;
-        if(amount == type(uint256).max) {
-            debtShares = debtSharesOf[msg.sender];
-            amount = debtShares * totalDebt / debtSupply;
-        } else {
-            debtShares = amount * debtSupply / totalDebt;
-        }
-        debtSharesOf[msg.sender] -= debtShares;
+        require((debtShares = previewRepay(amount)) != 0, "zeroShares");
+        debtSharesOf[to] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= amount;
         asset.transferFrom(msg.sender, address(this), amount);
@@ -370,19 +373,30 @@ contract Pool {
     }
 
     function getAssetsOf(address account) public view returns (uint) {
-        if(totalSupply == 0) return 0;
-        return balanceOf[account] * (totalAssets()) / totalSupply;
+        return convertToAssets(balanceOf[account]);
+    }
+
+    function convertToDebtAssets(uint256 debtShares) public view returns (uint256) {
+        uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
+
+        return supply == 0 ? debtShares : mulDivDown(debtShares, totalDebt, debtSupply);
+    }
+
+    function convertToDebtShares(uint256 debtAssets) public view returns (uint256) {
+        uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
+
+        return supply == 0 ? debtAssets : mulDivUp(debtAssets, debtSupply, totalDebt);
     }
 
     function getDebtOf(address account) public view returns (uint) {
         if(debtSupply == 0) return 0;
         uint256 timeElapsed = block.timestamp - lastAccrued;
-        if(timeElapsed == 0) return debtSharesOf[account] * totalDebt / debtSupply;
+        if(timeElapsed == 0) return convertToDebtAssets(debtSharesOf[account]);
         (uint borrowRateBps,) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * borrowRateBps * timeElapsed / 10000 / 365 days;
-        uint shares = interest * totalSupply / (totalAssets());
-        if(shares == 0) return debtSharesOf[account] * totalDebt / debtSupply;
-        return debtSharesOf[account] * (totalDebt + interest) / (debtSupply + shares);
+        uint shares = convertToDebtShares(interest);
+        if(shares == 0) return convertToDebtAssets(debtSharesOf[account]);
+        return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply + shares);
     }
 
     function getSupplied() external view returns (uint) {
