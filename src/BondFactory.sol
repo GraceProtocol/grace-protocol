@@ -24,7 +24,7 @@ contract BondFactory {
     }
 
     function createBond(
-        address underlying,
+        address asset,
         string memory name,
         string memory symbol,
         uint startTimestamp,
@@ -34,7 +34,7 @@ contract BondFactory {
     ) external returns (address bond) {
         require(msg.sender == operator, "onlyOperator");
         bond = address(new RecurringBond(
-            IERC20(underlying),
+            IERC20(asset),
             IERC20(address(GRACE)),
             name,
             symbol,

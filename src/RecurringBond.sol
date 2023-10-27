@@ -17,7 +17,7 @@ contract RecurringBond {
     string public symbol;
     uint8 public constant decimals = 18;
     uint constant MANTISSA = 1e18;
-    IERC20 public immutable underlying;
+    IERC20 public immutable asset;
     IERC20 public immutable reward;
     IFactory public factory;
     uint public rewardBudget;
@@ -37,7 +37,7 @@ contract RecurringBond {
     mapping (uint => uint) public cyclePreorders;
 
     constructor(
-        IERC20 _underlying,
+        IERC20 _asset,
         IERC20 _reward,
         string memory _name,
         string memory _symbol,
@@ -49,7 +49,7 @@ contract RecurringBond {
         require(_startTimestamp >= block.timestamp, "startTimestamp must be now or in the future");
         require(_auctionDuration > 0, "auctionDuration must be greater than 0");
         require(_bondDuration > _auctionDuration, "bondDuration must be greater than auctionDuration");
-        underlying = _underlying;
+        asset = _asset;
         reward = _reward;
         name = _name;
         symbol = _symbol;
@@ -100,12 +100,13 @@ contract RecurringBond {
         return block.timestamp < auctionEnd;
     }
 
-    function deposit(uint amount) external {
-        updateIndex(msg.sender);
+    function deposit(uint amount, address recipient) external {
+        updateIndex(recipient);
         require(isAuctionActive(), "auction is not active");
-        balances[msg.sender] = balanceOf(msg.sender) + amount;
+        balances[recipient] = balanceOf(recipient) + amount;
         deposits += amount;
-        underlying.transferFrom(msg.sender, address(this), amount);
+        asset.transferFrom(msg.sender, address(this), amount);
+        emit Deposit(msg.sender, recipient, amount);
     }
 
     function withdraw(uint amount) external {
@@ -113,7 +114,8 @@ contract RecurringBond {
         require(isAuctionActive(), "auction is not active");
         balances[msg.sender] = balanceOf(msg.sender) - amount;
         deposits -= amount;
-        underlying.transfer(msg.sender, amount);
+        asset.transfer(msg.sender, amount);
+        emit Withdraw(msg.sender, amount);
     }
 
     function totalPreorders() external view returns (uint) {
@@ -126,15 +128,16 @@ contract RecurringBond {
         return accountCyclePreorder[account][currentCycle];
     }
 
-    function preorder(uint amount) external {
-        updateIndex(msg.sender);
+    function preorder(uint amount, address recipient) external {
+        updateIndex(recipient);
         require(!isAuctionActive(), "auction is active");
         uint currentCycle = getCycle();
-        accountCyclePreorder[msg.sender][currentCycle] += amount;
+        accountCyclePreorder[recipient][currentCycle] += amount;
         cyclePreorders[currentCycle] += amount;
-        balances[msg.sender] += amount;
+        balances[recipient] += amount;
         deposits += amount;
-        underlying.transferFrom(msg.sender, address(this), amount);
+        asset.transferFrom(msg.sender, address(this), amount);
+        emit Preorder(msg.sender, recipient, amount);
     }
 
     function cancelPreorder(uint amount) external {
@@ -145,7 +148,8 @@ contract RecurringBond {
         cyclePreorders[currentCycle] -= amount;
         balances[msg.sender] -= amount;
         deposits -= amount;
-        underlying.transfer(msg.sender, amount);
+        asset.transfer(msg.sender, amount);
+        emit CancelPreorder(msg.sender, amount);
     }
 
     function claimable(address user) public view returns(uint) {
@@ -166,7 +170,7 @@ contract RecurringBond {
         uint amount = accruedRewards[msg.sender];
         accruedRewards[msg.sender] = 0;
         factory.transferReward(msg.sender, amount);
-        
+        emit Claim(msg.sender, amount);
     }
 
     function getNextMaturity() external view returns (uint) {
@@ -230,9 +234,15 @@ contract RecurringBond {
         if (!isAuctionActive()) {
             rewardBudget = _rewardBudget;
         }
+        emit SetBudget(_rewardBudget);
     }
 
     event Transfer(address indexed from, address indexed to, uint value);
     event Approval(address indexed owner, address indexed spender, uint value);
-
+    event Deposit(address indexed caller, address indexed owner, uint amount);
+    event Withdraw(address indexed owner, uint amount);
+    event Preorder(address indexed caller, address indexed owner, uint amount);
+    event CancelPreorder(address indexed owner, uint amount);
+    event Claim(address indexed owner, uint amount);
+    event SetBudget(uint rewardBudget);
 }

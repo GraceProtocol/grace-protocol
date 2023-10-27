@@ -60,13 +60,13 @@ contract MainnetDeployerScript is Script {
         FixedPriceFeed usdcPriceFeed = new FixedPriceFeed(8, 100000000);
         // 8 decimal token
         address YEENUS = 0x93fCA4c6E2525C09c95269055B46f16b1459BF9d;
-        // Deploy USDC pool (YEENUS)
-        address usdcPool = deployPool(core, bondFactory, YEENUS, address(usdcPriceFeed), 1_000_000 * 1e8);
+        // Deploy USDC pool (YEENUS) and bond
+        deployPool(core, bondFactory, YEENUS, address(usdcPriceFeed), 1_000_000 * 1e8);
 
         // Chainlink feed on Sepolia
         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
         // Deploy WETH collateral
-        address wethCollateral = deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
+        deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
 
         // Set BondFactory operator to timelock
         bondFactory.setOperator(address(timelock));

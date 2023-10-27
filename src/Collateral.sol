@@ -144,7 +144,7 @@ contract Collateral {
         return convertToShares(assets);
     }
 
-    function convertToAssets(uint256 shares) public view virtual returns (uint256) {
+    function convertToAssets(uint256 shares) public view returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : mulDivDown(shares, totalAssets(), supply);
@@ -156,7 +156,7 @@ contract Collateral {
         return supply == 0 ? assets : mulDivUp(assets, supply, totalAssets());
     }
 
-    function previewRedeem(uint256 shares) public view virtual returns (uint256) {
+    function previewRedeem(uint256 shares) public view returns (uint256) {
         return convertToAssets(shares);
     }
 

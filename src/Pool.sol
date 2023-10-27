@@ -76,7 +76,7 @@ contract Pool {
         core.globalUnlock();
     }
 
-    function totalAssets() public view virtual returns (uint256) {
+    function totalAssets() public view returns (uint256) {
         return lastBalance + totalDebt;
     }
 
@@ -245,17 +245,17 @@ contract Pool {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
-    function convertToAssets(uint256 shares) public view virtual returns (uint256) {
+    function convertToAssets(uint256 shares) public view returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : mulDivDown(shares, totalAssets(), supply);
     }
 
-    function previewRedeem(uint256 shares) public view virtual returns (uint256) {
+    function previewRedeem(uint256 shares) public view returns (uint256) {
         return convertToAssets(shares);
     }
 
-    function redeem(uint256 shares, address receiver, address owner) public lock virtual returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
