@@ -328,6 +328,10 @@ contract Collateral {
         ICollateralUnderlying(_stuckToken).transfer(dst, amount);
     }
 
+    function invalidateNonce() external {
+        nonces[msg.sender]++;
+    }    
+
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);

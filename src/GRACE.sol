@@ -434,4 +434,8 @@ contract Grace {
         return true;
     }
 
+    function invalidateNonce() external {
+        nonces[msg.sender]++;
+    }
+
 }

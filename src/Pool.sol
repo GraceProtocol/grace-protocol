@@ -27,8 +27,8 @@ contract Pool {
     IPoolCore public immutable core;
     uint256 internal constant MAX_UINT256 = 2**256 - 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
-    // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-    bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
+    bytes32 public immutable PERMIT_TYPEHASH;
+    bytes32 public immutable PERMIT_BORROW_TYPEHASH;
     uint public totalSupply;
     uint public debtSupply;
     uint public totalDebt;
@@ -39,6 +39,7 @@ contract Pool {
     uint constant MINIMUM_BALANCE = 10**3;
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint)) public allowance;
+    mapping (address => mapping (address => uint)) public borrowAllowance;
     mapping(address => uint) public debtSharesOf;
     mapping(address => uint) public nonces;
 
@@ -52,6 +53,8 @@ contract Pool {
         symbol = _symbol;
         asset = _asset;
         core = IPoolCore(_core);
+        PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+        PERMIT_BORROW_TYPEHASH = keccak256("PermitBorrow(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
         uint chainId;
         assembly {
             chainId := chainid()
@@ -180,6 +183,12 @@ contract Pool {
         return true;
     }
 
+    function approveBorrow(address spender, uint256 amount) public returns (bool) {
+        borrowAllowance[msg.sender][spender] = amount;
+        emit BorrowApproval(msg.sender, spender, amount);
+        return true;
+    }
+
     function transferFrom(
         address sender,
         address recipient,
@@ -274,9 +283,24 @@ contract Pool {
             )
         );
         address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == owner, 'UniswapV2: INVALID_SIGNATURE');
+        require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
+    }
+
+    function permitBorrow(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
+        require(deadline >= block.timestamp, 'permitExpired');
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                '\x19\x01',
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(PERMIT_BORROW_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
+            )
+        );
+        address recoveredAddress = ecrecover(digest, v, r, s);
+        require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
+        borrowAllowance[owner][spender] = value;
+        emit BorrowApproval(owner, spender, value);
     }
 
     function accrueInterest() internal {
@@ -295,10 +319,15 @@ contract Pool {
         debtSharesOf[borrowRateDestination] += shares;
     }
 
-    function borrow(uint256 amount) public lock {
+    function borrow(uint256 amount, address owner, address recipient) public lock {
         accrueInterest();
-        require(core.onPoolBorrow(msg.sender, amount), "beforePoolBorrow");
+        require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
+        if (msg.sender != owner) {
+            uint256 allowed = borrowAllowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) borrowAllowance[owner][msg.sender] = allowed - amount;
+        }
         uint debtShares;
         if(debtSupply == 0) {
             debtShares = amount;
@@ -306,10 +335,10 @@ contract Pool {
             debtShares = amount * debtSupply / totalDebt;
         }
         require(debtShares > 0, "zeroShares");
-        debtSharesOf[msg.sender] += debtShares;
+        debtSharesOf[owner] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
-        asset.transfer(msg.sender, amount);
+        asset.transfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
     }
 
@@ -366,8 +395,13 @@ contract Pool {
         IPoolUnderlying(_stuckToken).transfer(dst, amount);
     }
 
+    function invalidateNonce() external {
+        nonces[msg.sender]++;
+    }
+
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
+    event BorrowApproval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(
         address indexed caller,
