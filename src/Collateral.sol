@@ -304,8 +304,7 @@ contract Collateral {
     }
 
     function getCollateralOf(address account) public view returns (uint256) {
-        if(totalSupply == 0) return 0;
-        return totalAssets() * balanceOf[account] / totalSupply;
+        return convertToAssets(balanceOf[account]);
     }
 
     function seize(address account, uint256 assets, address to) public lock {

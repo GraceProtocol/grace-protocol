@@ -366,7 +366,7 @@ contract Pool {
         accrueInterest();
         require(msg.sender == address(core), "onlyCore");
         uint debtShares = debtSharesOf[msg.sender];
-        uint debt = convrtToDebtAssets(debtShares);
+        uint debt = convertToDebtAssets(debtShares);
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
