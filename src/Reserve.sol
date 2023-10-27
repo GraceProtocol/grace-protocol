@@ -53,7 +53,7 @@ contract Reserve {
         require(locked == 1, "locked");
         locked = 2;
         PullRequest memory request = pullRequest;
-        require(block.timestamp > request.timestamp + 90 days, "tooSoon");
+        require(block.timestamp > request.timestamp + 30 days, "tooSoon");
         pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
             _safeTransfer(address(request.tokens[i]), request.dst, request.amounts[i]);
@@ -65,8 +65,8 @@ contract Reserve {
     function rageQuit(uint256 graceAmount, IERC20[] memory tokens) external {
         require(locked == 1, "locked");
         locked = 2;
-        uint256 dayOfQuarter = (block.timestamp / 1 days) % 90;
-        require(dayOfQuarter == 1, "Function can only be called on the first day of each quarter");
+        uint256 dayOfMonth = (block.timestamp / 1 days) % 30;
+        require(dayOfMonth == 1, "Function can only be called on the first day of each month");
         if(graceAmount == type(uint256).max) graceAmount = grace.balanceOf(msg.sender);
         grace.transferFrom(msg.sender, address(this), graceAmount);
         uint totalSupply = grace.totalSupply();
