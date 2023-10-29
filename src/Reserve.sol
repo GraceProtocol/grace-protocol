@@ -23,7 +23,7 @@ contract Reserve {
     uint constant MANTISSA = 1e18;
     uint public locked = 1; // 1 = unlocked, 2 = locked
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
-    PullRequest public pullRequest;
+    PullRequest pullRequest;
 
     constructor(IERC20 _grace, address _owner) {
         grace = _grace;
@@ -60,6 +60,16 @@ contract Reserve {
         }
         locked = 1;
         emit PullExecuted(request.amounts, request.tokens, request.dst);
+    }
+
+    function getPullRequestTimestamp() external view returns (uint) { return pullRequest.timestamp; }
+    function getPullRequestDst() external view returns (address) { return pullRequest.dst; }
+    function getPullRequestTokensLength() external view returns (uint) { return pullRequest.tokens.length; }
+    function getPullRequestTokens(uint i) external view returns (address, uint) {
+        return (
+            address(pullRequest.tokens[i]),
+            pullRequest.amounts[i]
+        );
     }
 
     function rageQuit(uint256 graceAmount, IERC20[] memory tokens) external {
