@@ -35,7 +35,6 @@ contract Pool {
     uint public lastAccrued;
     uint public lastBalance;
     uint public lastBorrowRate;
-    uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint)) public allowance;
@@ -93,9 +92,6 @@ contract Pool {
 
     function maxWithdraw(address owner) public view returns (uint256 assets) {
         uint shares = balanceOf[owner];
-        if(shares > totalSupply - MINIMUM_LIQUIDITY) {
-            shares = totalSupply - MINIMUM_LIQUIDITY;
-        }
         assets = convertToAssets(shares);
         if(assets > lastBalance - MINIMUM_BALANCE) {
             assets = lastBalance - MINIMUM_BALANCE;
@@ -104,9 +100,6 @@ contract Pool {
 
     function maxRedeem(address owner) public view returns (uint256 shares) {
         shares = balanceOf[owner];
-        if(shares > totalSupply - MINIMUM_LIQUIDITY) {
-            shares = totalSupply - MINIMUM_LIQUIDITY;
-        }
         uint assets = convertToAssets(shares);
         if(assets > lastBalance - MINIMUM_BALANCE) {
             assets = lastBalance - MINIMUM_BALANCE;
@@ -160,6 +153,7 @@ contract Pool {
     }
 
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
+        accrueInterest();
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
@@ -208,6 +202,7 @@ contract Pool {
     }
 
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
+        accrueInterest();
         assets = previewMint(shares);
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         balanceOf[recipient] += shares;
@@ -229,9 +224,9 @@ contract Pool {
         address receiver,
         address owner
     ) public lock returns (uint256 shares) {
+        accrueInterest();
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         shares = previewWithdraw(assets);
-        require(totalSupply - shares >= MINIMUM_LIQUIDITY, "minimumLiquidity");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -256,10 +251,10 @@ contract Pool {
     }
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
+        accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
-        require(totalSupply - shares >= MINIMUM_LIQUIDITY, "minimumLiquidity");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 

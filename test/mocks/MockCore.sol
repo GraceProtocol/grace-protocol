@@ -3,30 +3,28 @@ pragma solidity 0.8.21;
 
 contract MockCore {
 
-    bool public value = true;
-    uint public collateralFeeBps;
-    address public collateralFeeTo;
-
-    function setValue (bool _value) public {
-        value = _value;
+    function globalLock(address) external {}
+    function globalUnlock() external {}
+    function updateCollateralFeeController() external {}
+    function getCollateralFeeBps(address) external view returns (uint, address) {}
+    function onCollateralDeposit(address, uint) external returns (bool) {
+        return true;
     }
-
-    function setCollateralFeeBps (uint256 _fee, address _dest) public {
-        collateralFeeBps = _fee;
-        collateralFeeTo = _dest;
+    function onCollateralWithdraw(address, uint) external returns (bool) {
+        return true;
     }
-
-    function onCollateralDeposit(address, address, uint256) external returns (bool) {
-        value = value; // silence warning
-        return value;
+    function onCollateralReceive(address) external returns (bool) {
+        return true;
     }
-    
-    function onCollateralWithdraw(address, uint256) external returns (bool) {
-        value = value; // silence warning
-        return value;
+    function onPoolDeposit(uint) external returns (bool) {
+        return true;
     }
-
-    function getCollateralFeeBps(address) external view returns (uint256, address) {
-        return (collateralFeeBps, collateralFeeTo);
+    function updateInterestRateController() external {}
+    function getBorrowRateBps(address) external view returns (uint, address) {}
+    function onPoolBorrow(address, uint) external returns (bool) {
+        return true;
+    }
+    function onPoolRepay(address, uint) external returns (bool) {
+        return true;
     }
 }

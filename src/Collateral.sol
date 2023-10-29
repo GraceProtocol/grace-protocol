@@ -30,7 +30,6 @@ contract Collateral {
     uint public lastAccrued;
     uint public lastBalance;
     uint public lastFeeBps;
-    uint constant MINIMUM_LIQUIDITY = 10**3;
     uint constant MINIMUM_BALANCE = 10**3;
     uint256 internal constant MAX_UINT256 = 2**256 - 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -180,9 +179,6 @@ contract Collateral {
 
     function maxWithdraw(address owner) public view returns (uint256 assets) {
         uint shares = getCollateralOf(owner);
-        if(shares > totalSupply - MINIMUM_LIQUIDITY) {
-            shares = totalSupply - MINIMUM_LIQUIDITY;
-        }
         assets = convertToAssets(shares);
         uint max = core.maxCollateralWithdraw(address(this), owner);
         assets = assets > max ? max : assets;
@@ -226,7 +222,6 @@ contract Collateral {
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         shares = previewWithdraw(assets);
-        require(totalSupply - shares >= MINIMUM_LIQUIDITY, "minimumLiquidity");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -242,7 +237,6 @@ contract Collateral {
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
         accrueFee();
-        require(totalSupply - shares >= MINIMUM_LIQUIDITY, "minimumLiquidity");
         assets = previewRedeem(shares);
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
@@ -312,7 +306,6 @@ contract Collateral {
         require(msg.sender == address(core), "onlyCore");
         require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         uint shares = convertToShares(assets);
-        require(totalSupply - shares >= MINIMUM_LIQUIDITY, "minimumLiquidity");
         totalSupply -= shares;
         balanceOf[account] -= shares;
         asset.transfer(to, assets);
