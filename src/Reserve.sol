@@ -65,9 +65,9 @@ contract Reserve {
     function rageQuit(uint256 graceAmount, IERC20[] memory tokens) external {
         require(locked == 1, "locked");
         locked = 2;
+        require(tokens.length > 0, "noTokens");
         uint256 dayOfMonth = (block.timestamp / 1 days) % 30;
-        require(dayOfMonth == 1, "Function can only be called on the first day of each month");
-        if(graceAmount == type(uint256).max) graceAmount = grace.balanceOf(msg.sender);
+        require(dayOfMonth == 0, "Only first day of each month");
         grace.transferFrom(msg.sender, address(this), graceAmount);
         uint totalSupply = grace.totalSupply();
         grace.burn(graceAmount);
@@ -78,8 +78,8 @@ contract Reserve {
             }
             uint balance = tokens[i].balanceOf(address(this));
             require(balance > 0, "zeroBalance");
-            uint share = balance * shareMantissa / MANTISSA;
-            _safeTransfer(address(tokens[i]), msg.sender, share);
+            uint out = balance * shareMantissa / MANTISSA;
+            _safeTransfer(address(tokens[i]), msg.sender, out);
         }
         emit RageQuit(msg.sender, graceAmount);
         locked = 1;

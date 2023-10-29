@@ -14,7 +14,6 @@ contract ERC20 {
     }
 
     function transfer(address _to, uint256 _value) public returns (bool success) {
-        require(balances[msg.sender] >= _value);
         balances[msg.sender] -= _value;
         balances[_to] += _value;
         emit Transfer(msg.sender, _to, _value);
@@ -22,7 +21,6 @@ contract ERC20 {
     }
 
     function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
-        require(balances[_from] >= _value && allowance[_from][msg.sender] >= _value);
         balances[_to] += _value;
         balances[_from] -= _value;
         allowance[_from][msg.sender] -= _value;
@@ -40,5 +38,12 @@ contract ERC20 {
         totalSupply += _value;
         balances[_to] += _value;
         emit Transfer(address(0), _to, _value);
+    }
+
+    function burn(uint256 _value) public returns (bool) {
+        totalSupply -= _value;
+        balances[msg.sender] -= _value;
+        emit Transfer(msg.sender, address(0), _value);
+        return true;
     }
 }
