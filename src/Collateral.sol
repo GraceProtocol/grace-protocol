@@ -220,7 +220,6 @@ contract Collateral {
     ) public lock returns (uint256 shares) {
         accrueFee();
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
-        require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -231,6 +230,7 @@ contract Collateral {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -239,7 +239,6 @@ contract Collateral {
         accrueFee();
         assets = previewRedeem(shares);
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
-        require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -249,6 +248,7 @@ contract Collateral {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -304,12 +304,12 @@ contract Collateral {
     function seize(address account, uint256 assets, address to) public lock {
         accrueFee();
         require(msg.sender == address(core), "onlyCore");
-        require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         uint shares = convertToShares(assets);
         totalSupply -= shares;
         balanceOf[account] -= shares;
         asset.transfer(to, assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(account, address(0), shares);
         emit Withdraw(msg.sender, to, account, shares, assets);
     }

@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 interface IPool {
-    function getSupplied() external view returns (uint256);
+    function totalAssets() external view returns (uint256);
     function totalDebt() external view returns (uint256);
 }
 
@@ -39,7 +39,7 @@ contract InterestRateController {
     function update(address pool) external {
         require(msg.sender == core, "onlyCore");
         IPool poolContract = IPool(pool);
-        uint supplied = poolContract.getSupplied();
+        uint supplied = poolContract.totalAssets();
         uint currentUtilBps;
         uint debt = poolContract.totalDebt();
         if (supplied > 0) currentUtilBps = debt * 10000 / supplied; // else util is already 0

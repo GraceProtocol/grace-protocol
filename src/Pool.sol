@@ -225,7 +225,6 @@ contract Pool {
         address owner
     ) public lock returns (uint256 shares) {
         accrueInterest();
-        require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -236,6 +235,7 @@ contract Pool {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -254,7 +254,6 @@ contract Pool {
         accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
-        require(lastBalance - assets >= MINIMUM_BALANCE, "minimumBalance");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -264,6 +263,7 @@ contract Pool {
         balanceOf[owner] -= shares;
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -305,13 +305,14 @@ contract Pool {
         try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
         (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
-        uint shares = convertToDebtShares(interest);
+        lastBorrowRate = borrowRateBps;
+        uint shares = convertToShares(interest);
         if(shares == 0) return;
         lastAccrued = block.timestamp;
         totalDebt += interest;
-        debtSupply += shares;
-        lastBorrowRate = borrowRateBps;
-        debtSharesOf[borrowRateDestination] += shares;
+        totalSupply += shares;
+        balanceOf[borrowRateDestination] += shares;
+        emit Transfer(address(0), borrowRateDestination, shares);
     }
 
     function previewBorrow(uint256 assets) public view returns (uint256) {
@@ -323,7 +324,6 @@ contract Pool {
     function borrow(uint256 amount, address owner, address recipient) public lock {
         accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
-        require(lastBalance - amount >= MINIMUM_BALANCE, "minimumBalance");
         if (msg.sender != owner) {
             uint256 allowed = borrowAllowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -336,6 +336,7 @@ contract Pool {
         totalDebt += amount;
         asset.transfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
@@ -387,15 +388,10 @@ contract Pool {
         if(debtSupply == 0) return 0;
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return convertToDebtAssets(debtSharesOf[account]);
-        (uint borrowRateBps,) = core.getBorrowRateBps(address(this));
-        uint256 interest = totalDebt * borrowRateBps * timeElapsed / 10000 / 365 days;
+        uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = convertToDebtShares(interest);
         if(shares == 0) return convertToDebtAssets(debtSharesOf[account]);
-        return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply + shares);
-    }
-
-    function getSupplied() external view returns (uint) {
-        return totalAssets();
+        return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply);
     }
 
     function pull(address _stuckToken, address dst, uint amount) external {

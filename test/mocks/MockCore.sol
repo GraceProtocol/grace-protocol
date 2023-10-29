@@ -6,7 +6,9 @@ contract MockCore {
     function globalLock(address) external {}
     function globalUnlock() external {}
     function updateCollateralFeeController() external {}
-    function getCollateralFeeBps(address) external view returns (uint, address) {}
+    function getCollateralFeeBps(address) external view returns (uint, address) {
+        return (10000, address(1));
+    }
     function onCollateralDeposit(address, uint) external returns (bool) {
         return true;
     }
@@ -20,7 +22,9 @@ contract MockCore {
         return true;
     }
     function updateInterestRateController() external {}
-    function getBorrowRateBps(address) external view returns (uint, address) {}
+    function getBorrowRateBps(address) external view returns (uint, address) {
+        return (10000, address(1));
+    }
     function onPoolBorrow(address, uint) external returns (bool) {
         return true;
     }

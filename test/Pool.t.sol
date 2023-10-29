@@ -165,4 +165,36 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.nonces(address(this)), 1);
     }
 
+    function test_accrueInterest() public {
+        uint DEPOSIT = 2000;
+        uint BORROW = 1000;
+        uint INTEREST = 1000;
+        asset.mint(address(this), DEPOSIT + INTEREST);
+        asset.approve(address(pool), DEPOSIT + BORROW + INTEREST);
+        pool.deposit(DEPOSIT, address(this));
+        pool.borrow(BORROW, address(this), address(this));
+        vm.warp(block.timestamp + 365 days);
+        // mock core sets borrow rate to 100%, so we expect 1000 interest
+        assertEq(pool.getDebtOf(address(this)), BORROW + INTEREST);
+        assertEq(pool.getAssetsOf(address(this)), DEPOSIT);
+        pool.repay(address(this), BORROW + INTEREST);
+        assertEq(pool.getAssetsOf(address(1)), INTEREST);
+        assertEq(pool.balanceOf(address(1)), INTEREST);
+        assertEq(pool.totalSupply(), DEPOSIT + INTEREST);
+        assertEq(pool.lastBorrowRate(), 10000);
+        assertEq(pool.lastBalance(), DEPOSIT + INTEREST);
+    }
+
+    function test_pull() public {
+        asset.mint(address(this), 1000);
+        asset.approve(address(pool), 1000);
+        pool.deposit(1000, address(this));
+        vm.expectRevert("cannotPullUnderlying");
+        pool.pull(address(asset), address(1), 1000);
+        ERC20 stuckToken = new ERC20();
+        stuckToken.mint(address(pool), 1000);
+        pool.pull(address(stuckToken), address(this), 1000);
+        assertEq(stuckToken.balanceOf(address(pool)), 0);
+        assertEq(stuckToken.balanceOf(address(this)), 1000);
+    }
 }

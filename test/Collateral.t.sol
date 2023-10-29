@@ -135,10 +135,30 @@ contract CollateralTest is Test, MockCore {
         assertEq(stuckToken.balanceOf(address(this)), 1000);
     }
 
-    function invalidateNonce() public {
+    function test_invalidateNonce() public {
         assertEq(collateral.nonces(address(this)), 0);
         collateral.invalidateNonce();
         assertEq(collateral.nonces(address(this)), 1);
+    }
+
+    function test_accrueFee() public {
+        asset.mint(address(this), 10000);
+        asset.approve(address(collateral), 10000);
+        collateral.deposit(10000, address(this));
+        vm.warp(block.timestamp + (365 days / 2));
+        assertEq(collateral.getCollateralOf(address(this)), 5000);
+        assertEq(collateral.totalAssets(), 5000);
+        assertEq(collateral.totalSupply(), 10000);
+        collateral.withdraw(1000, address(this), address(this));
+        assertEq(collateral.getCollateralOf(address(this)), 4000);
+        assertEq(collateral.totalAssets(), 4000);
+        assertEq(collateral.totalSupply(), 9000);
+        vm.warp(block.timestamp + 365 days);
+        // should not go below minimumBalance
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(collateral.totalAssets(), 1000);
+        vm.expectRevert("minimumBalance");
+        collateral.withdraw(1000, address(this), address(this));
     }
 
 }

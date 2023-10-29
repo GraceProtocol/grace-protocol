@@ -23,7 +23,7 @@ interface ICollateralFeeController {
 
 interface IPool {
     function asset() external view returns (address);
-    function getSupplied() external view returns (uint);
+    function totalAssets() external view returns (uint);
     function getDebtOf(address account) external view returns (uint);
     function repay(address to, uint amount) external;
     function writeOff(address account) external;
@@ -252,7 +252,7 @@ contract Core {
         uint totalValueUsd = 0;
         for (uint i = 0; i < poolList.length; i++) {
             IPool pool = poolList[i];
-            uint supplied = pool.getSupplied();
+            uint supplied = pool.totalAssets();
             uint price = oracle.getDebtPriceMantissa(address(pool));
             totalValueUsd += supplied * price / MANTISSA;
         }
@@ -263,7 +263,7 @@ contract Core {
         uint totalValueUsd = 0;
         for (uint i = 0; i < poolList.length; i++) {
             IPool pool = poolList[i];
-            uint supplied = pool.getSupplied();
+            uint supplied = pool.totalAssets();
             uint price = oracle.viewDebtPriceMantissa(address(pool));
             totalValueUsd += supplied * price / MANTISSA;
         }
@@ -498,7 +498,7 @@ contract Core {
     function onPoolDeposit(uint256 amount) external view returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
-        require(pool.getSupplied() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
+        require(pool.totalAssets() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
         return true;
     }
 
