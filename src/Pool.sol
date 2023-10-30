@@ -160,6 +160,8 @@ contract Pool {
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateInterestRateController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
     }
@@ -209,6 +211,8 @@ contract Pool {
         totalSupply += shares;
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateInterestRateController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
     }
@@ -236,6 +240,7 @@ contract Pool {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateInterestRateController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -264,6 +269,7 @@ contract Pool {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateInterestRateController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -301,11 +307,8 @@ contract Pool {
     function accrueInterest() internal {
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return;
-        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
-        (uint borrowRateBps, address borrowRateDestination) = core.getBorrowRateBps(address(this));
+        (, address borrowRateDestination) = core.getBorrowRateBps(address(this));
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
-        lastBorrowRate = borrowRateBps;
         uint shares = convertToShares(interest);
         if(shares == 0) return;
         lastAccrued = block.timestamp;
@@ -313,6 +316,13 @@ contract Pool {
         totalSupply += shares;
         balanceOf[borrowRateDestination] += shares;
         emit Transfer(address(0), borrowRateDestination, shares);
+    }
+
+    function updateInterestRateController() internal {
+        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
+        try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
+        (uint borrowRateBps,) = core.getBorrowRateBps(address(this));
+        lastBorrowRate = borrowRateBps;
     }
 
     function previewBorrow(uint256 assets) public view returns (uint256) {
@@ -337,6 +347,7 @@ contract Pool {
         asset.transfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateInterestRateController();
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
@@ -356,6 +367,7 @@ contract Pool {
         totalDebt -= amount;
         asset.transferFrom(msg.sender, address(this), amount);
         lastBalance = asset.balanceOf(address(this));
+        updateInterestRateController();
     }
 
     function writeOff(address account) public lock {
@@ -366,6 +378,7 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
+        updateInterestRateController();
     }
 
     function getAssetsOf(address account) public view returns (uint) {
