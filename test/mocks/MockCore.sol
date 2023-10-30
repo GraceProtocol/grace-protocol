@@ -21,6 +21,9 @@ contract MockCore {
     function onPoolDeposit(uint) external returns (bool) {
         return true;
     }
+    function onPoolWithdraw(uint256 amount) external returns (bool) {
+        return true;
+    }
     function updateInterestRateController() external {}
     function getBorrowRateBps(address) external view returns (uint, address) {
         return (10000, address(1));

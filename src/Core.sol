@@ -60,6 +60,11 @@ contract Core {
         uint depositCap;
         bool borrowPaused;
         bool borrowSuspended;
+        // supply value mean variables
+        uint lastSupplyCumulativeUpdate;
+        uint supplyCumulative;
+        uint lastSupplyMeanUpdate;
+        uint supplyMean;
     }
 
     IPoolDeployer public immutable poolDeployer;
@@ -73,6 +78,9 @@ contract Core {
     uint public lastSupplyValueMeanUpdate;
     uint public lastSupplyValueMean;
     uint public prevSupplyValueMean;
+    uint public totalSupplyValueMean;
+    uint public prevTotalSupplyValueMean;
+    uint public lastTotalSupplyValueMeanUpdate;
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
@@ -165,7 +173,11 @@ contract Core {
             enabled: true,
             depositCap: depositCap,
             borrowPaused: false,
-            borrowSuspended: false
+            borrowSuspended: false,
+            lastSupplyCumulativeUpdate: 0,
+            supplyCumulative: 0,
+            lastSupplyMeanUpdate: 0,
+            supplyMean: 0
         });
         oracle.setPoolFeed(underlying, feed);
         poolList.push(pool);
@@ -250,82 +262,6 @@ contract Core {
         collateralFeeController.update(address(collateral), price, capUsd);
     }
 
-    function getSupplyValueUsd() internal returns (uint256) {
-        uint totalValueUsd = 0;
-        for (uint i = 0; i < poolList.length; i++) {
-            IPool pool = poolList[i];
-            uint supplied = pool.totalAssets();
-            uint price = oracle.getDebtPriceMantissa(address(pool));
-            totalValueUsd += supplied * price / MANTISSA;
-        }
-        return totalValueUsd;
-    }
-
-    function viewSupplyValueUsd() internal view returns (uint256) {
-        uint totalValueUsd = 0;
-        for (uint i = 0; i < poolList.length; i++) {
-            IPool pool = poolList[i];
-            uint supplied = pool.totalAssets();
-            uint price = oracle.viewDebtPriceMantissa(address(pool));
-            totalValueUsd += supplied * price / MANTISSA;
-        }
-        return totalValueUsd;
-    }
-
-    function getSupplyValueMean() internal returns (uint) {
-        uint _lastCumulativeUpdate = lastSupplyValueCumulativeUpdate;
-        uint cumulativeTimeElapsed = block.timestamp - _lastCumulativeUpdate;
-        if(cumulativeTimeElapsed > 0 && _lastCumulativeUpdate > 0) {
-            uint currentSupplyValueUsd = getSupplyValueUsd();
-            lastSupplyValueCumulative += currentSupplyValueUsd * cumulativeTimeElapsed;
-        }
-        lastSupplyValueCumulativeUpdate = block.timestamp;
-
-        uint _lastSupplyValueMeanUpdate = lastSupplyValueMeanUpdate;
-        uint meanTimeElapsed = block.timestamp - _lastSupplyValueMeanUpdate;
-        uint mean;
-        if(meanTimeElapsed >= 7 days) {
-            mean = lastSupplyValueCumulative / meanTimeElapsed;
-            prevSupplyValueMean = lastSupplyValueMean;
-            lastSupplyValueMean = mean;
-            lastSupplyValueMeanUpdate = block.timestamp;
-            lastSupplyValueCumulative = 0;
-            meanTimeElapsed = 0; // for weightedMeans
-        } else {
-            mean = lastSupplyValueMean;
-        }
-        uint currentWeight = meanTimeElapsed;
-        uint prevWeight = 7 days - currentWeight;
-        uint weightedMeans = (prevSupplyValueMean * prevWeight + mean * currentWeight) / 7 days;
-        return weightedMeans;
-    }
-
-    function viewSupplyValueMean() internal view returns (uint) {
-        uint _lastCumulativeUpdate = lastSupplyValueCumulativeUpdate;
-        uint cumulativeTimeElapsed = block.timestamp - _lastCumulativeUpdate;
-        uint _lastSupplyValueCumulative = lastSupplyValueCumulative;
-        if(cumulativeTimeElapsed > 0 && _lastCumulativeUpdate > 0) {
-            uint currentSupplyValueUsd = viewSupplyValueUsd();
-            _lastSupplyValueCumulative += currentSupplyValueUsd * cumulativeTimeElapsed;
-        }
-
-        uint _lastSupplyValueMeanUpdate = lastSupplyValueMeanUpdate;
-        uint meanTimeElapsed = block.timestamp - _lastSupplyValueMeanUpdate;
-        uint mean;
-        uint _prevSupplyValueMean = prevSupplyValueMean;
-        if(meanTimeElapsed >= 7 days) {
-            mean = lastSupplyValueCumulative / meanTimeElapsed;
-            _prevSupplyValueMean = lastSupplyValueMean;
-            meanTimeElapsed = 0; // for weightedMeans
-        } else {
-            mean = lastSupplyValueMean;
-        }
-        uint currentWeight = meanTimeElapsed;
-        uint prevWeight = 7 days - currentWeight;
-        uint weightedMeans = (_prevSupplyValueMean * prevWeight + mean * currentWeight) / 7 days;
-        return weightedMeans;
-    }
-
     function getSoftCapUsd(ICollateral collateral, uint mean) internal view returns (uint) {
         return mean * collateralsData[collateral].softCapBps / 10000;
     }
@@ -334,7 +270,7 @@ contract Core {
         if(collateralsData[collateral].enabled == false) return 0;
         if(collateralsData[collateral].depositPaused == true) return 0;
         // find soft cap in usd terms
-        uint softCapUsd = getSoftCapUsd(collateral, viewSupplyValueMean());
+        uint softCapUsd = getSoftCapUsd(collateral, getSupplyValueMean());
         uint capUsd = collateralsData[collateral].hardCap < softCapUsd ? collateralsData[collateral].hardCap : softCapUsd;
         uint totalAssets = collateral.totalAssets();
         // get oracle price
@@ -371,7 +307,7 @@ contract Core {
 
         // calculate assets
         uint assetsUsd = 0;
-        uint mean = viewSupplyValueMean();
+        uint mean = getSupplyValueMean();
         for (uint i = 0; i < userCollaterals[account].length; i++) {
             ICollateral thisCollateral = userCollaterals[account][i];
             uint softCapUsd = getSoftCapUsd(thisCollateral, mean);
@@ -521,11 +457,55 @@ contract Core {
         return collateralFeeController.getCollateralFeeBps(collateral);
     }
 
-    function onPoolDeposit(uint256 amount) external view returns (bool) {
+    function onPoolDeposit(uint256 amount) external returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
-        require(pool.totalAssets() + amount <= poolsData[pool].depositCap, "depositCapExceeded");
+        uint totalAssets = pool.totalAssets();
+        require(totalAssets + amount <= poolsData[pool].depositCap, "depositCapExceeded");
+        updateTotalSuppliedValue(pool, totalAssets + amount);
         return true;
+    }
+
+    function onPoolWithdraw(uint256 amount) external returns (bool) {
+        IPool pool = IPool(msg.sender);
+        require(poolsData[pool].enabled, "notPool");
+        uint totalAssets = pool.totalAssets();
+        totalAssets = totalAssets > amount ? totalAssets - amount : 0;
+        updateTotalSuppliedValue(pool, totalAssets);
+        return true;
+    }
+
+    function updateTotalSuppliedValue(IPool pool, uint totalAssets) internal {
+        uint lastSupplyCumulativeUpdate = poolsData[pool].lastSupplyCumulativeUpdate;
+        uint cumulativeTimeElapsed = block.timestamp - lastSupplyCumulativeUpdate;
+        if(cumulativeTimeElapsed > 0 && lastSupplyCumulativeUpdate > 0) {
+            uint price = oracle.getDebtPriceMantissa(address(pool));
+            uint totalValueUsd = totalAssets * price / MANTISSA;
+            poolsData[pool].supplyCumulative += totalValueUsd * cumulativeTimeElapsed;
+        }
+        poolsData[pool].lastSupplyCumulativeUpdate = block.timestamp;
+
+        uint lastSupplyMeanUpdate = poolsData[pool].lastSupplyMeanUpdate;
+        uint meanTimeElapsed = block.timestamp - lastSupplyMeanUpdate;
+        if(meanTimeElapsed >= 7 days) {
+            uint mean = poolsData[pool].supplyCumulative / meanTimeElapsed;
+            prevTotalSupplyValueMean = getSupplyValueMean();
+            totalSupplyValueMean -= poolsData[pool].supplyMean;
+            totalSupplyValueMean += mean;
+            lastTotalSupplyValueMeanUpdate = block.timestamp;
+            poolsData[pool].supplyMean = mean;
+            poolsData[pool].lastSupplyMeanUpdate = block.timestamp;
+            poolsData[pool].supplyCumulative = 0;
+        }
+    }
+
+    function getSupplyValueMean() public view returns (uint) {
+        uint _lastSupplyMeanUpdate = lastTotalSupplyValueMeanUpdate;
+        uint meanTimeElapsed = block.timestamp - _lastSupplyMeanUpdate;
+        uint currentWeight = meanTimeElapsed > 7 days ? 7 days : meanTimeElapsed;
+        uint prevWeight = 7 days - currentWeight;
+        uint weightedMeans = (prevTotalSupplyValueMean * prevWeight + totalSupplyValueMean * currentWeight) / 7 days;
+        return weightedMeans;
     }
 
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
@@ -755,6 +735,7 @@ contract Core {
         for (uint i = 0; i < userPools[borrower].length; i++) {
             IPool thisPool = userPools[borrower][i];
             thisPool.writeOff(borrower);
+            updateTotalSuppliedValue(thisPool, thisPool.totalAssets());
             poolUsers[thisPool][borrower] = false;
         }
         delete userPools[borrower];

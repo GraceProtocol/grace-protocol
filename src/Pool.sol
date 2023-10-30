@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 interface IPoolCore {
     function onPoolDeposit(uint256 amount) external returns (bool);
+    function onPoolWithdraw(uint256 amount) external returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool) external view returns (uint256, address);
@@ -229,6 +230,7 @@ contract Pool {
         address owner
     ) public lock returns (uint256 shares) {
         accrueInterest();
+        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -259,6 +261,7 @@ contract Pool {
         accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
+        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
