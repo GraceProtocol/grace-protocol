@@ -69,13 +69,13 @@ contract ReserveTest is Test {
         IERC20[] memory tokens = new IERC20[](1);
         tokens[0] = IERC20(address(backing));
         uint[] memory amounts = new uint[](1);
-        amounts[0] = 1000;
+        amounts[0] = 1001; // more than balance
         reserve.requestPull(tokens, amounts, address(this));
         assertEq(reserve.getPullRequestTimestamp(), block.timestamp);
         assertEq(reserve.getPullRequestDst(), address(this));
         assertEq(reserve.getPullRequestTokensLength(), 1);
         (address token, uint amount) = reserve.getPullRequestTokens(0);
-        assertEq(amount, 1000);
+        assertEq(amount, 1001);
         assertEq(token, address(backing));
         vm.expectRevert("tooSoon");
         reserve.executePull();

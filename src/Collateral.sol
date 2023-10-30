@@ -86,7 +86,7 @@ contract Collateral {
     function updateCollateralFeeController() internal {
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
         try ICollateralCore(core).updateCollateralFeeController{gas: passedGas}() {} catch {}
-        (uint currentFeeBps, address feeDestination) = core.getCollateralFeeBps(address(asset));   
+        (uint currentFeeBps,) = core.getCollateralFeeBps(address(asset));   
         lastFeeBps = currentFeeBps;
     }
 

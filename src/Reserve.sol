@@ -57,7 +57,9 @@ contract Reserve {
         require(block.timestamp < request.timestamp + 90 days, "tooLate");
         pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
-            _safeTransfer(address(request.tokens[i]), request.dst, request.amounts[i]);
+            uint bal = request.tokens[i].balanceOf(address(this));
+            uint amount = request.amounts[i] > bal ? bal : request.amounts[i];
+            _safeTransfer(address(request.tokens[i]), request.dst, amount);
         }
         locked = 1;
         emit PullExecuted(request.amounts, request.tokens, request.dst);
