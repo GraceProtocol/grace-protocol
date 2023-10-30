@@ -53,7 +53,7 @@ contract CollateralFeeController {
         uint lastFeeUpdate = collateralStates[collateral].lastFeeUpdate;
         uint feeTimeElapsed = block.timestamp - lastFeeUpdate;
         if(feeTimeElapsed >= UPDATE_PERIOD) {
-            uint utilCumulative = collateralStates[collateral].utilCumulative / lastFeeUpdate;
+            uint utilCumulative = collateralStates[collateral].utilCumulative / feeTimeElapsed;
             collateralStates[collateral].utilCumulative = 0;
             if(utilCumulative >= FEE_KINK_BPS) {
                 collateralStates[collateral].fee += FEE_STEP_BPS;

@@ -51,7 +51,7 @@ contract InterestRateController {
         uint lastBorrowRateUpdate = poolStates[pool].lastBorrowRateUpdate;
         uint rateTimeElapsed = block.timestamp - lastBorrowRateUpdate;
         if(rateTimeElapsed >= UPDATE_PERIOD) {
-            uint utilCumulative = poolStates[pool].utilCumulative / lastBorrowRateUpdate;
+            uint utilCumulative = poolStates[pool].utilCumulative / rateTimeElapsed;
             poolStates[pool].utilCumulative = 0;
             if(utilCumulative >= RATE_KINK_BPS) {
                 poolStates[pool].borrowRate += RATE_STEP_BPS;
