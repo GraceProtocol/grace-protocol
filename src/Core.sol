@@ -72,6 +72,7 @@ contract Core {
     uint public lastSupplyValueCumulative;
     uint public lastSupplyValueMeanUpdate;
     uint public lastSupplyValueMean;
+    uint public prevSupplyValueMean;
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
@@ -273,45 +274,56 @@ contract Core {
 
     function getSupplyValueMean() internal returns (uint) {
         uint _lastCumulativeUpdate = lastSupplyValueCumulativeUpdate;
-        if(_lastCumulativeUpdate == block.timestamp) return lastSupplyValueMean;
-        // get all pools usd value
-        uint currentSupplyValueUsd = getSupplyValueUsd();
         uint cumulativeTimeElapsed = block.timestamp - _lastCumulativeUpdate;
-        if(_lastCumulativeUpdate > 0) {
+        if(cumulativeTimeElapsed > 0 && _lastCumulativeUpdate > 0) {
+            uint currentSupplyValueUsd = getSupplyValueUsd();
             lastSupplyValueCumulative += currentSupplyValueUsd * cumulativeTimeElapsed;
         }
         lastSupplyValueCumulativeUpdate = block.timestamp;
+
         uint _lastSupplyValueMeanUpdate = lastSupplyValueMeanUpdate;
         uint meanTimeElapsed = block.timestamp - _lastSupplyValueMeanUpdate;
         uint mean;
         if(meanTimeElapsed >= 7 days) {
             mean = lastSupplyValueCumulative / meanTimeElapsed;
+            prevSupplyValueMean = lastSupplyValueMean;
             lastSupplyValueMean = mean;
             lastSupplyValueMeanUpdate = block.timestamp;
             lastSupplyValueCumulative = 0;
+            meanTimeElapsed = 0; // for weightedMeans
         } else {
             mean = lastSupplyValueMean;
         }
-        return mean;
+        uint currentWeight = meanTimeElapsed;
+        uint prevWeight = 7 days - currentWeight;
+        uint weightedMeans = (prevSupplyValueMean * prevWeight + mean * currentWeight) / 7 days;
+        return weightedMeans;
     }
 
     function viewSupplyValueMean() internal view returns (uint) {
         uint _lastCumulativeUpdate = lastSupplyValueCumulativeUpdate;
-        if(_lastCumulativeUpdate == block.timestamp) return lastSupplyValueMean;
-        // get all pools usd value
-        uint currentSupplyValueUsd = viewSupplyValueUsd();
         uint cumulativeTimeElapsed = block.timestamp - _lastCumulativeUpdate;
         uint _lastSupplyValueCumulative = lastSupplyValueCumulative;
-        if(_lastCumulativeUpdate > 0) {
+        if(cumulativeTimeElapsed > 0 && _lastCumulativeUpdate > 0) {
+            uint currentSupplyValueUsd = viewSupplyValueUsd();
             _lastSupplyValueCumulative += currentSupplyValueUsd * cumulativeTimeElapsed;
         }
+
         uint _lastSupplyValueMeanUpdate = lastSupplyValueMeanUpdate;
         uint meanTimeElapsed = block.timestamp - _lastSupplyValueMeanUpdate;
+        uint mean;
+        uint _prevSupplyValueMean = prevSupplyValueMean;
         if(meanTimeElapsed >= 7 days) {
-            return _lastSupplyValueCumulative / meanTimeElapsed;
+            mean = lastSupplyValueCumulative / meanTimeElapsed;
+            _prevSupplyValueMean = lastSupplyValueMean;
+            meanTimeElapsed = 0; // for weightedMeans
         } else {
-            return lastSupplyValueMean;
+            mean = lastSupplyValueMean;
         }
+        uint currentWeight = meanTimeElapsed;
+        uint prevWeight = 7 days - currentWeight;
+        uint weightedMeans = (_prevSupplyValueMean * prevWeight + mean * currentWeight) / 7 days;
+        return weightedMeans;
     }
 
     function getSoftCapUsd(ICollateral collateral, uint mean) internal view returns (uint) {
