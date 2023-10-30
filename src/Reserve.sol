@@ -53,7 +53,8 @@ contract Reserve {
         require(locked == 1, "locked");
         locked = 2;
         PullRequest memory request = pullRequest;
-        require(block.timestamp > request.timestamp + 30 days, "tooSoon");
+        require(block.timestamp > request.timestamp + 60 days, "tooSoon");
+        require(block.timestamp < request.timestamp + 90 days, "tooLate");
         pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
             _safeTransfer(address(request.tokens[i]), request.dst, request.amounts[i]);

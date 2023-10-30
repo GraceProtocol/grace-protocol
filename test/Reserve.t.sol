@@ -79,7 +79,10 @@ contract ReserveTest is Test {
         assertEq(token, address(backing));
         vm.expectRevert("tooSoon");
         reserve.executePull();
-        vm.warp(block.timestamp + 30 days + 1);
+        vm.expectRevert("tooLate");
+        vm.warp(block.timestamp + 90 days + 1);
+        reserve.executePull();
+        vm.warp(block.timestamp - 30 days);
         reserve.executePull();
         assertEq(backing.balanceOf(address(this)), 1000);
         assertEq(backing.balanceOf(address(reserve)), 0);
