@@ -745,8 +745,10 @@ contract Core {
         // write off
         for (uint i = 0; i < userPools[borrower].length; i++) {
             IPool thisPool = userPools[borrower][i];
+            uint totalAssets = thisPool.totalAssets(); // to use previous pool lastBalance
+            uint debt = thisPool.getDebtOf(borrower);
             thisPool.writeOff(borrower);
-            updateTotalSuppliedValue(thisPool, thisPool.totalAssets());
+            updateTotalSuppliedValue(thisPool, totalAssets - debt);
             poolUsers[thisPool][borrower] = false;
         }
         delete userPools[borrower];
