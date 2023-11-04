@@ -8,27 +8,19 @@ library EMA {
     struct EMAState {
         uint ema;
         uint lastUpdate;
-        uint halfLife;
     }
 
-    function init(EMAState memory state, uint halfLife) internal view returns (EMAState memory) {
-        require(halfLife > 0, "zeroHalfLife");
+    function init(EMAState memory state) internal view returns (EMAState memory) {
         state.ema = 0;
         state.lastUpdate = block.timestamp;
-        state.halfLife = halfLife * 1e18 / 693147180559945300; // ln(2)
         return state;
     }
 
-    function setHalfLife(EMAState memory state, uint halfLife) internal pure returns (EMAState memory) {
-        require(halfLife > 0, "zeroHalfLife");
-        state.halfLife = halfLife * 1e18 / 693147180559945300; // ln(2)
-        return state;
-    }
-    
-    function update(EMAState memory state, uint input) view internal returns (EMAState memory) {
+    function update(EMAState memory state, uint input, uint halfLife) view internal returns (EMAState memory) {
         uint dt = block.timestamp - state.lastUpdate;
-        if(dt > 0) {
-            uint alpha = uint(wadExp(int256(-int256(dt) * 1e18 / int256(state.halfLife))));
+        if(dt > 0 && halfLife > 0) {
+            halfLife = halfLife * 1e18 / 693147180559945300; // halfLife / ln(2)
+            uint alpha = uint(wadExp(int256(-int256(dt) * 1e18 / int256(halfLife))));
             state.ema = (input * (10**18 - alpha) + state.ema * alpha) / 10**18;
             state.lastUpdate = block.timestamp;
         }
