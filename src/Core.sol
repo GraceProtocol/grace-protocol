@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
+import "./EMA.sol";
 import "./Oracle.sol";
 
 interface IPoolDeployer {
@@ -46,6 +47,8 @@ interface IERC20 {
 
 contract Core {
 
+    using EMA for EMA.EMAState;
+
     struct CollateralConfig {
         bool enabled;
         uint collateralFactorBps;
@@ -68,11 +71,7 @@ contract Core {
         uint depositCap;
         bool borrowPaused;
         bool borrowSuspended;
-        // supply value mean variables
-        uint lastSupplyCumulativeUpdate;
-        uint supplyCumulative;
-        uint lastSupplyMeanUpdate;
-        uint supplyMean;
+        EMA.EMAState supplyEMA;
     }
 
     IPoolDeployer public immutable poolDeployer;
@@ -81,14 +80,7 @@ contract Core {
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
-    uint public lastSupplyValueCumulativeUpdate;
-    uint public lastSupplyValueCumulative;
-    uint public lastSupplyValueMeanUpdate;
-    uint public lastSupplyValueMean;
-    uint public prevSupplyValueMean;
-    uint public totalSupplyValueMean;
-    uint public prevTotalSupplyValueMean;
-    uint public lastTotalSupplyValueMeanUpdate;
+    uint public supplyEMASum;
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
@@ -177,15 +169,14 @@ contract Core {
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying));
+        EMA.EMAState memory emaState;
+        emaState = emaState.init();
         poolsData[pool] = PoolConfig({
             enabled: true,
             depositCap: depositCap,
             borrowPaused: false,
             borrowSuspended: false,
-            lastSupplyCumulativeUpdate: 0,
-            supplyCumulative: 0,
-            lastSupplyMeanUpdate: 0,
-            supplyMean: 0
+            supplyEMA: emaState
         });
         oracle.setPoolFeed(underlying, feed);
         poolList.push(pool);
@@ -281,7 +272,6 @@ contract Core {
     }
 
     function getSoftCapUsd(ICollateral collateral) public view returns (uint) {
-        uint mean = getSupplyValueMean();
         uint softCapBps = collateralsData[collateral].softCapBps;
         uint softCapTimeElapsed = block.timestamp - collateralsData[collateral].lastSoftCapUpdate;
         if(softCapTimeElapsed < 7 days) { // else use current soft cap
@@ -290,7 +280,7 @@ contract Core {
             uint prevWeight = 7 days - currentWeight;
             softCapBps = (prevSoftCap * prevWeight + softCapBps * currentWeight) / 7 days;
         }
-        return mean * softCapBps / 10000;
+        return supplyEMASum * softCapBps / 10000;
     }
 
     function getHardCapUsd(ICollateral collateral) public view returns (uint) {
@@ -524,36 +514,13 @@ contract Core {
     }
 
     function updateTotalSuppliedValue(IPool pool, uint totalAssets) internal {
-        uint lastSupplyCumulativeUpdate = poolsData[pool].lastSupplyCumulativeUpdate;
-        uint cumulativeTimeElapsed = block.timestamp - lastSupplyCumulativeUpdate;
-        if(cumulativeTimeElapsed > 0 && lastSupplyCumulativeUpdate > 0) {
-            uint price = oracle.getDebtPriceMantissa(address(pool));
-            uint totalValueUsd = totalAssets * price / MANTISSA;
-            poolsData[pool].supplyCumulative += totalValueUsd * cumulativeTimeElapsed;
-        }
-        poolsData[pool].lastSupplyCumulativeUpdate = block.timestamp;
-
-        uint lastSupplyMeanUpdate = poolsData[pool].lastSupplyMeanUpdate;
-        uint meanTimeElapsed = block.timestamp - lastSupplyMeanUpdate;
-        if(meanTimeElapsed >= 7 days) {
-            uint mean = poolsData[pool].supplyCumulative / meanTimeElapsed;
-            prevTotalSupplyValueMean = getSupplyValueMean();
-            totalSupplyValueMean -= poolsData[pool].supplyMean;
-            totalSupplyValueMean += mean;
-            lastTotalSupplyValueMeanUpdate = block.timestamp;
-            poolsData[pool].supplyMean = mean;
-            poolsData[pool].lastSupplyMeanUpdate = block.timestamp;
-            poolsData[pool].supplyCumulative = 0;
-        }
-    }
-
-    function getSupplyValueMean() public view returns (uint) {
-        uint _lastSupplyMeanUpdate = lastTotalSupplyValueMeanUpdate;
-        uint meanTimeElapsed = block.timestamp - _lastSupplyMeanUpdate;
-        uint currentWeight = meanTimeElapsed > 7 days ? 7 days : meanTimeElapsed;
-        uint prevWeight = 7 days - currentWeight;
-        uint weightedMeans = (prevTotalSupplyValueMean * prevWeight + totalSupplyValueMean * currentWeight) / 7 days;
-        return weightedMeans;
+        uint price = oracle.getDebtPriceMantissa(address(pool));
+        uint totalValueUsd = totalAssets * price / MANTISSA;
+        EMA.EMAState memory supplyEMA = poolsData[pool].supplyEMA;
+        uint prevEMA = supplyEMA.ema;
+        supplyEMA = supplyEMA.update(totalValueUsd, 7 days);
+        poolsData[pool].supplyEMA = supplyEMA;
+        supplyEMASum = supplyEMASum - prevEMA + supplyEMA.ema;
     }
 
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
