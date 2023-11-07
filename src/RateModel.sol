@@ -1,5 +1,8 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
+
+
+// This one is MIT licensed because it's a reusable model that can be useful for others
 
 import "./EMA.sol";
 
@@ -12,7 +15,7 @@ contract RateModel {
     using EMA for EMA.EMAState;
 
     uint constant KINK_BPS = 9000;
-    uint constant HALF_LIFE = 1 days;
+    uint constant HALF_LIFE = 3 days;
 
     struct RateConfig {
         uint minRate;
