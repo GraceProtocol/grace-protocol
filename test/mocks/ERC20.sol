@@ -2,6 +2,9 @@
 pragma solidity 0.8.21;
 
 contract ERC20 {
+
+    uint8 public decimals = 18;
+
     uint256 public totalSupply;
     mapping (address => uint256) public balances;
     mapping (address => mapping (address => uint256)) public allowance;
@@ -45,5 +48,9 @@ contract ERC20 {
         balances[msg.sender] -= _value;
         emit Transfer(msg.sender, address(0), _value);
         return true;
+    }
+
+    function setDecimals(uint8 _decimals) public {
+        decimals = _decimals;
     }
 }

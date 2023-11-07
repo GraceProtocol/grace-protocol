@@ -45,9 +45,9 @@ contract Oracle {
         }
     }
 
-    function getCappedPrice(uint price, uint8 decimals, uint totalCollateral, uint capUsd) internal pure returns (uint) {
+    function getCappedPrice(uint price, uint totalCollateral, uint capUsd) internal pure returns (uint) {
         if (totalCollateral == 0) return price;
-        uint cappedPrice = capUsd * 10 ** decimals / totalCollateral;
+        uint cappedPrice = capUsd * 1e18 / totalCollateral;
         return cappedPrice < price ? cappedPrice : price;
     }
 
@@ -60,7 +60,6 @@ contract Oracle {
                     token,
                     feed
                 ),
-                IOracleERC20(token).decimals(),
                 totalCollateral,
                 capUsd
             );
@@ -79,7 +78,7 @@ contract Oracle {
             uint lastWeekLow = weeklyLows[token][week - 1];
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
-            uint twoWeekLow = weekLow > lastWeekLow && weekLow > 0 ? lastWeekLow : weekLow;
+            uint twoWeekLow = weekLow > lastWeekLow && lastWeekLow > 0 ? lastWeekLow : weekLow;
             if(twoWeekLow > 0 && newBorrowingPower > twoWeekLow) {
                 uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
                 return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
@@ -121,7 +120,6 @@ contract Oracle {
                     token,
                     feed
                 ),
-                IOracleERC20(token).decimals(),
                 totalCollateral,
                 capUsd
             );
