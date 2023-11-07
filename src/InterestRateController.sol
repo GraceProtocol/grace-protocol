@@ -3,11 +3,6 @@ pragma solidity 0.8.21;
 
 import "./EMA.sol";
 
-interface IPool {
-    function totalAssets() external view returns (uint256);
-    function totalDebt() external view returns (uint256);
-}
-
 interface ICore {
     function owner() external view returns (address);
 }
