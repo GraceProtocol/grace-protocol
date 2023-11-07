@@ -13,8 +13,7 @@ interface ICollateralDeployer {
 }
 
 interface IInterestRateController {
-    function getBorrowRateBps(address pool) external view returns (uint256);
-    function update(address pool) external;
+    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
 }
 
 interface ICollateralFeeController {
@@ -170,7 +169,7 @@ contract Core {
         require(size > 0, "invalidUnderlying");
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying));
         EMA.EMAState memory emaState;
-        emaState = emaState.init();
+        emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({
             enabled: true,
             depositCap: depositCap,
@@ -479,15 +478,9 @@ contract Core {
         }
     }
 
-    function updateInterestRateController() external {
-        IPool pool = IPool(msg.sender);
-        require(poolsData[pool].enabled, "onlyPools");
-        interestRateController.update(address(pool));
-    }
-
-    function getInterestRateControllerBorrowRate(address pool) external view returns (uint256) {
+    function getInterestRateControllerBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
         require(msg.sender == address(this), "onlyCore");
-        return interestRateController.getBorrowRateBps(pool);
+        return interestRateController.getBorrowRateBps(pool, util, lastBorrowRate, lastAccrued);
     }
 
     function getCollateralFeeControllerFeeBps(address collateral) external view returns (uint256) {
@@ -604,16 +597,15 @@ contract Core {
         return true;
     }
 
-    function getBorrowRateBps(address pool) external view returns (uint256, address) {
-        if (interestRateController == IInterestRateController(address(0))) return (0, address(0));
-        if(feeDestination == address(0)) return (0, address(0));
+    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        if (interestRateController == IInterestRateController(address(0))) return 0;
         
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getInterestRateControllerBorrowRate{gas: passedGas}(pool) returns (uint256 _borrowRateBps) {
+        try Core(this).getInterestRateControllerBorrowRate{gas: passedGas}(pool, util, lastBorrowRate, lastAccrued) returns (uint256 _borrowRateBps) {
             if(_borrowRateBps > MAX_BORROW_RATE_BPS) _borrowRateBps = MAX_BORROW_RATE_BPS;
-            return (_borrowRateBps, feeDestination);
+            return _borrowRateBps;
         } catch {
-            return (0, address(0));
+            return 0;
         }
     }
 

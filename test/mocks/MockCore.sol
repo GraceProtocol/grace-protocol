@@ -25,13 +25,16 @@ contract MockCore {
         return true;
     }
     function updateInterestRateController() external {}
-    function getBorrowRateBps(address) external view returns (uint, address) {
-        return (10000, address(1));
+    function getBorrowRateBps(address,uint,uint,uint) external view returns (uint) {
+        return 10000;
     }
     function onPoolBorrow(address, uint) external returns (bool) {
         return true;
     }
     function onPoolRepay(address, uint) external returns (bool) {
         return true;
+    }
+    function feeDestination() external view returns (address) {
+        return address(1);
     }
 }

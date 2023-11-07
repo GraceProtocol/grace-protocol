@@ -10,12 +10,6 @@ library EMA {
         uint lastUpdate;
     }
 
-    function init(EMAState memory state) internal view returns (EMAState memory) {
-        state.ema = 0;
-        state.lastUpdate = block.timestamp;
-        return state;
-    }
-
     function update(EMAState memory state, uint input, uint halfLife) view internal returns (EMAState memory) {
         uint dt = block.timestamp - state.lastUpdate;
         if(dt > 0 && halfLife > 0) {

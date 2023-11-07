@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
+import "./EMA.sol";
+
 interface IPool {
     function totalAssets() external view returns (uint256);
     function totalDebt() external view returns (uint256);
@@ -12,18 +14,18 @@ interface ICore {
 
 contract InterestRateController {
 
+    using EMA for EMA.EMAState;
+
+    uint constant KINK_BPS = 9000;
+    uint constant HALF_LIFE = 1 days;
+
     struct PoolState {
-        uint utilCumulative;
-        uint lastUtilUpdate;
-        uint lastBorrowRateUpdate;
-        uint borrowRate;
         uint minRate;
+        uint kinkRate;
+        uint maxRate;
     }
 
     address public immutable core;
-    uint public constant UPDATE_PERIOD = 1 days;
-    uint public constant RATE_STEP_BPS = 100;
-    uint public constant RATE_KINK_BPS = 8000;
 
     mapping (address => PoolState) public poolStates;
 
@@ -31,44 +33,29 @@ contract InterestRateController {
         core = _core;
     }
 
-    function getBorrowRateBps(address pool) external view returns (uint256) {
-        return poolStates[pool].borrowRate;
-    }
-
-    function update(address pool) external {
-        require(msg.sender == core, "onlyCore");
-        IPool poolContract = IPool(pool);
-        uint supplied = poolContract.totalAssets();
-        uint debt = poolContract.totalDebt();
-        uint utilBps;
-        if (supplied > 0) utilBps = debt * 10000 / supplied; // else util is already 0
-        uint lastUtilUpdate = poolStates[pool].lastUtilUpdate;
-        uint utilTimeElapsed = block.timestamp - lastUtilUpdate;
-        if(utilTimeElapsed > 0 && lastUtilUpdate > 0) {
-            poolStates[pool].utilCumulative += utilBps * utilTimeElapsed;
-        }
-        poolStates[pool].lastUtilUpdate = block.timestamp;
-        uint lastBorrowRateUpdate = poolStates[pool].lastBorrowRateUpdate;
-        uint rateTimeElapsed = block.timestamp - lastBorrowRateUpdate;
-        if(rateTimeElapsed >= UPDATE_PERIOD) {
-            uint utilCumulative = poolStates[pool].utilCumulative / rateTimeElapsed;
-            poolStates[pool].utilCumulative = 0;
-            if(utilCumulative >= RATE_KINK_BPS) {
-                poolStates[pool].borrowRate += RATE_STEP_BPS;
-            } else if(poolStates[pool].borrowRate > RATE_STEP_BPS) {
-                uint prevBorrowRate = poolStates[pool].borrowRate;
-                uint minRate = poolStates[pool].minRate;
-                poolStates[pool].borrowRate = prevBorrowRate - RATE_STEP_BPS > minRate ? prevBorrowRate - RATE_STEP_BPS : minRate;
-            } else {
-                poolStates[pool].borrowRate = poolStates[pool].minRate;
-            }
-            poolStates[pool].lastBorrowRateUpdate = block.timestamp;
+    function getCurveRate(address pool, uint util) public view returns (uint) {
+        PoolState memory state = poolStates[pool];
+        if(util < KINK_BPS) {
+            return state.minRate + util * (state.kinkRate - state.minRate) / KINK_BPS;
+        } else {
+            return state.kinkRate + (util - KINK_BPS) * (state.maxRate - state.kinkRate) / (10000 - KINK_BPS);
         }
     }
 
-    function setMinRate(address pool, uint rate) external {
+    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        uint curveRate = getCurveRate(pool, util);
+        // apply EMA to smoothen rate change
+        EMA.EMAState memory rateEMA;
+        rateEMA.lastUpdate = lastAccrued;
+        rateEMA.ema = lastBorrowRate;
+        rateEMA = rateEMA.update(curveRate, HALF_LIFE);
+        return rateEMA.ema;
+    }
+
+    function setPoolRates(address pool, uint minRate, uint kinkRate, uint maxRate) external {
         require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
-        poolStates[pool].minRate = rate;
-        if(poolStates[pool].borrowRate < rate) poolStates[pool].borrowRate = rate;
-    }   
+        poolStates[pool].minRate = minRate;
+        poolStates[pool].kinkRate = kinkRate;
+        poolStates[pool].maxRate = maxRate;
+    }
 }

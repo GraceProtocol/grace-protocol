@@ -9,18 +9,10 @@ contract EMATest is Test {
     // use EMA
     using EMA for EMA.EMAState;
 
-    function test_init() public {
-        EMA.EMAState memory emaState;
-        uint halfLife = 100;
-        emaState = emaState.init();
-        assertEq(emaState.ema, 0);
-        assertEq(emaState.lastUpdate, block.timestamp);
-    }
-
     function test_update() public {
         EMA.EMAState memory emaState;
         uint halfLife = 7 days;
-        emaState = emaState.init();
+        emaState.lastUpdate = block.timestamp;
         assertEq(emaState.ema, 0);
         skip(7 days);
         emaState = emaState.update(1 * 1e18, halfLife);

@@ -2,12 +2,12 @@
 pragma solidity 0.8.21;
 
 interface IPoolCore {
+    function feeDestination() external view returns (address);
     function onPoolDeposit(uint256 amount) external returns (bool);
     function onPoolWithdraw(uint256 amount) external returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, uint256 amount) external returns (bool);
-    function getBorrowRateBps(address pool) external view returns (uint256, address);
-    function updateInterestRateController() external;
+    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
     function globalLock(address caller) external;
     function globalUnlock() external;
     function poolsData(address pool) external view returns (bool enabled, uint depositCap, bool borrowPaused, bool borrowSuspended);
@@ -74,6 +74,28 @@ contract Pool {
         core.globalLock(msg.sender);
         _;
         core.globalUnlock();
+    }
+
+    function accrueInterest() internal returns (uint _lastAccrued) {
+        _lastAccrued = lastAccrued;
+        uint256 timeElapsed = block.timestamp - _lastAccrued;
+        if(timeElapsed == 0) return _lastAccrued;
+        uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
+        uint shares = convertToShares(interest);
+        if(shares == 0) return _lastAccrued;
+        lastAccrued = block.timestamp;
+        totalDebt += interest;
+        totalSupply += shares;
+        address borrowRateDestination = core.feeDestination();
+        balanceOf[borrowRateDestination] += shares;
+        emit Transfer(address(0), borrowRateDestination, shares);
+    }
+
+    function updateBorrowRate(uint _lastAccrued) internal {
+        uint totalAssets = totalAssets();
+        uint util = totalAssets == 0 ? 0 : totalDebt * 10000 / totalAssets;
+        uint borrowRate = core.getBorrowRateBps(address(this), util, lastBorrowRate, _lastAccrued);
+        lastBorrowRate = borrowRate;
     }
 
     function totalAssets() public view returns (uint256) {
@@ -154,7 +176,7 @@ contract Pool {
     }
 
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
@@ -162,9 +184,9 @@ contract Pool {
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateInterestRateController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
+        updateBorrowRate(_lastAccrued);
     }
 
     function transfer(address recipient, uint256 shares) public returns (bool) {
@@ -205,7 +227,7 @@ contract Pool {
     }
 
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         assets = previewMint(shares);
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         balanceOf[recipient] += shares;
@@ -213,9 +235,9 @@ contract Pool {
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateInterestRateController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
+        updateBorrowRate(_lastAccrued);
     }
 
     function previewWithdraw(uint256 assets) public view returns (uint256) {
@@ -229,7 +251,7 @@ contract Pool {
         address receiver,
         address owner
     ) public lock returns (uint256 shares) {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
@@ -242,9 +264,9 @@ contract Pool {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateInterestRateController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        updateBorrowRate(_lastAccrued);
     }
 
     function convertToAssets(uint256 shares) public view returns (uint256) {
@@ -258,7 +280,7 @@ contract Pool {
     }
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
@@ -272,9 +294,9 @@ contract Pool {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateInterestRateController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        updateBorrowRate(_lastAccrued);
     }
 
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
@@ -307,27 +329,6 @@ contract Pool {
         emit BorrowApproval(owner, spender, value);
     }
 
-    function accrueInterest() internal {
-        uint256 timeElapsed = block.timestamp - lastAccrued;
-        if(timeElapsed == 0) return;
-        (, address borrowRateDestination) = core.getBorrowRateBps(address(this));
-        uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
-        uint shares = convertToShares(interest);
-        if(shares == 0) return;
-        lastAccrued = block.timestamp;
-        totalDebt += interest;
-        totalSupply += shares;
-        balanceOf[borrowRateDestination] += shares;
-        emit Transfer(address(0), borrowRateDestination, shares);
-    }
-
-    function updateInterestRateController() internal {
-        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try IPoolCore(core).updateInterestRateController{gas: passedGas}() {} catch {}
-        (uint borrowRateBps,) = core.getBorrowRateBps(address(this));
-        lastBorrowRate = borrowRateBps;
-    }
-
     function previewBorrow(uint256 assets) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
@@ -335,7 +336,7 @@ contract Pool {
     }
 
     function borrow(uint256 amount, address owner, address recipient) public lock {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
             uint256 allowed = borrowAllowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -350,7 +351,7 @@ contract Pool {
         asset.transfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateInterestRateController();
+        updateBorrowRate(_lastAccrued);
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
@@ -360,7 +361,7 @@ contract Pool {
     }
 
     function repay(address to, uint amount) public lock {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         require(core.onPoolRepay(to, amount), "beforePoolRepay");
         if(amount == type(uint256).max) amount = getDebtOf(to);
         uint debtShares;
@@ -370,18 +371,18 @@ contract Pool {
         totalDebt -= amount;
         asset.transferFrom(msg.sender, address(this), amount);
         lastBalance = asset.balanceOf(address(this));
-        updateInterestRateController();
+        updateBorrowRate(_lastAccrued);
     }
 
     function writeOff(address account) public lock {
-        accrueInterest();
+        uint _lastAccrued = accrueInterest();
         require(msg.sender == address(core), "onlyCore");
         uint debtShares = debtSharesOf[msg.sender];
         uint debt = convertToDebtAssets(debtShares);
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
-        updateInterestRateController();
+        updateBorrowRate(_lastAccrued);
     }
 
     function getAssetsOf(address account) public view returns (uint) {
