@@ -49,6 +49,7 @@ contract RateModel {
 
     function setTargetRates(address target, uint minRate, uint kinkRate, uint maxRate) external {
         require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
+        require(minRate <= kinkRate && kinkRate <= maxRate, "invalidRates");
         configs[target].minRate = minRate;
         configs[target].kinkRate = kinkRate;
         configs[target].maxRate = maxRate;

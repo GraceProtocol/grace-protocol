@@ -112,7 +112,6 @@ contract Oracle {
         return 0;
     }
 
-    /// TODO: implement these functions
     function viewCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
