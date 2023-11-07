@@ -47,7 +47,7 @@ contract RateModelTest is Test {
     }
 
     function test_getRateBps() public {
-        uint HALF_LIFE = 2 days;
+        uint HALF_LIFE = 3 days;
         vm.startPrank(owner);
         rateModel.setTargetRates(address(2), 0, 5000, 10000); // 0%, 50%, 100%
         assertEq(rateModel.getRateBps(address(2), 0, 0, 0), 0);
