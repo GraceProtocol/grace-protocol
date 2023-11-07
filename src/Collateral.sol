@@ -5,8 +5,8 @@ interface ICollateralCore {
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
     function onCollateralReceive(address recipient) external returns (bool);
-    function getCollateralFeeBps(address collateral) external view returns (uint256, address);
-    function updateCollateralFeeController() external;
+    function getCollateralFeeBps(address collateral, uint lastFee, uint lastAccrued) external view returns (uint256);
+    function feeDestination() external view returns (address);
     function globalLock(address caller) external;
     function globalUnlock() external;
     function maxCollateralWithdraw(address collateral, address account) external view returns (uint);
@@ -65,29 +65,25 @@ contract Collateral {
         core.globalUnlock();
     }
 
-    function accrueFee() internal {
+    function accrueFee() internal returns (uint _lastAccrued) {
+        _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - lastAccrued;
-        if(timeElapsed == 0) return;
-        (, address feeDestination) = core.getCollateralFeeBps(address(asset));
-        uint feeBps = lastFeeBps;
-        if(feeBps == 0) {
+        if(timeElapsed == 0) return _lastAccrued;
+        if(lastFeeBps == 0) {
             lastAccrued = block.timestamp;
-            return;
+            return _lastAccrued;
         }
         uint balance = lastBalance;
-        uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
+        uint256 fee = balance * lastFeeBps * timeElapsed / 10000 / 365 days;
         if(fee > balance) fee = balance;
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
-        if(fee == 0) return;
+        if(fee == 0) return _lastAccrued;
         lastAccrued = block.timestamp;
-        asset.transfer(feeDestination, fee);
+        asset.transfer(core.feeDestination(), fee);
     }
 
-    function updateCollateralFeeController() internal {
-        uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try ICollateralCore(core).updateCollateralFeeController{gas: passedGas}() {} catch {}
-        (uint currentFeeBps,) = core.getCollateralFeeBps(address(asset));   
-        lastFeeBps = currentFeeBps;
+    function updateFee(uint _lastAccrued) internal {
+        lastFeeBps = core.getCollateralFeeBps(address(this), lastFeeBps, _lastAccrued);
     }
 
     function totalAssets() public view returns (uint256) {
@@ -164,7 +160,7 @@ contract Collateral {
     }
 
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
@@ -172,9 +168,9 @@ contract Collateral {
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateCollateralFeeController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
+        updateFee(_lastAccrued);
     }
 
     function previewMint(uint256 shares) public view returns (uint256) {
@@ -208,7 +204,7 @@ contract Collateral {
     }
 
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         assets = previewMint(shares);
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         balanceOf[recipient] += shares;
@@ -216,9 +212,9 @@ contract Collateral {
         asset.transferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateCollateralFeeController();
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
+        updateFee(_lastAccrued);
     }
 
     function withdraw(
@@ -226,7 +222,7 @@ contract Collateral {
         address receiver,
         address owner
     ) public lock returns (uint256 shares) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
@@ -239,13 +235,13 @@ contract Collateral {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateCollateralFeeController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        updateFee(_lastAccrued);
     }
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         assets = previewRedeem(shares);
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         if (msg.sender != owner) {
@@ -258,33 +254,33 @@ contract Collateral {
         asset.transfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateCollateralFeeController();
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        updateFee(_lastAccrued);
     }
 
     function transfer(address recipient, uint256 shares) public lock returns (bool) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         uint assets = convertToAssets(shares);
         require(core.onCollateralWithdraw(msg.sender, assets), "beforeCollateralWithdraw");
         balanceOf[msg.sender] -= shares;
         require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
         balanceOf[recipient] += shares;
-        updateCollateralFeeController();
         emit Transfer(msg.sender, recipient, shares);
+        updateFee(_lastAccrued);
         return true;
     }
 
     function transferFrom(address sender, address recipient, uint256 shares) public lock returns (bool) {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         uint assets = convertToAssets(shares);
         require(core.onCollateralWithdraw(sender, assets), "beforeCollateralWithdraw");
         balanceOf[sender] -= shares;
         allowance[sender][msg.sender] -= shares;
         require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
         balanceOf[recipient] += shares;
-        updateCollateralFeeController();
         emit Transfer(sender, recipient, shares);
+        updateFee(_lastAccrued);
         return true;
     }
 
@@ -314,7 +310,7 @@ contract Collateral {
     }
 
     function seize(address account, uint256 assets, address to) public lock {
-        accrueFee();
+        uint _lastAccrued = accrueFee();
         require(msg.sender == address(core), "onlyCore");
         uint shares = convertToShares(assets);
         totalSupply -= shares;
@@ -322,9 +318,9 @@ contract Collateral {
         asset.transfer(to, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        updateCollateralFeeController();
         emit Transfer(account, address(0), shares);
         emit Withdraw(msg.sender, to, account, shares, assets);
+        updateFee(_lastAccrued);
     }
 
     function pull(address _stuckToken, address dst, uint amount) external {

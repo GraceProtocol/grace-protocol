@@ -6,8 +6,8 @@ contract MockCore {
     function globalLock(address) external {}
     function globalUnlock() external {}
     function updateCollateralFeeController() external {}
-    function getCollateralFeeBps(address) external view returns (uint, address) {
-        return (10000, address(1));
+    function getCollateralFeeBps(address,uint,uint) external view returns (uint) {
+        return 10000;
     }
     function onCollateralDeposit(address, uint) external returns (bool) {
         return true;

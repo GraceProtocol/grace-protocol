@@ -4,9 +4,8 @@ pragma solidity ^0.8.13;
 import {Script, console2} from "forge-std/Script.sol";
 import {PoolDeployer} from "src/PoolDeployer.sol";
 import {CollateralDeployer} from "src/CollateralDeployer.sol";
-import {Core, IInterestRateController, ICollateralFeeController} from "src/Core.sol";
-import {InterestRateController} from "src/InterestRateController.sol";
-import {CollateralFeeController} from "src/CollateralFeeController.sol";
+import {Core, IRateModel} from "src/Core.sol";
+import {RateModel} from "src/RateModel.sol";
 import {Grace} from "src/GRACE.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {Timelock} from "src/Timelock.sol";
@@ -32,13 +31,11 @@ contract MainnetDeployerScript is Script {
         CollateralDeployer collateralDeployer = new CollateralDeployer();
         // deploy core
         Core core = new Core(deployer, address(poolDeployer), address(collateralDeployer));
-        // deploy interest rate controller
-        InterestRateController irc = new InterestRateController(address(core));
-        // deploy collateral fee controller
-        CollateralFeeController cfc = new CollateralFeeController(address(core));
+        // deploy interest rate model
+        RateModel rateModel = new RateModel(address(core));
         // connect them to core
-        core.setInterestRateController(IInterestRateController(address(irc)));
-        core.setCollateralFeeController(ICollateralFeeController(address(cfc)));
+        core.setInterestRateModel(IRateModel(address(rateModel)));
+        core.setCollateralFeeModel(IRateModel(address(rateModel)));
         // Deploy Timelock
         Timelock timelock = new Timelock(deployer);
         // deploy GRACE

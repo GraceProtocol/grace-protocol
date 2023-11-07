@@ -12,13 +12,8 @@ interface ICollateralDeployer {
     function deployCollateral(string memory name, string memory symbol, address underlying) external returns (address collateral);
 }
 
-interface IInterestRateController {
-    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
-}
-
-interface ICollateralFeeController {
-    function getCollateralFeeBps(address collateral) external view returns (uint256);
-    function update(address collateral, uint collateralPriceMantissa, uint capUsd) external;
+interface IRateModel {
+    function getRateBps(address target, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
 }
 
 interface IPool {
@@ -83,8 +78,8 @@ contract Core {
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
-    IInterestRateController public interestRateController;
-    ICollateralFeeController public collateralFeeController;
+    IRateModel public interestRateModel;
+    IRateModel public collateralFeeModel;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
@@ -116,8 +111,8 @@ contract Core {
 
     function setOwner(address _owner) public onlyOwner { owner = _owner; }
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
-    function setInterestRateController(IInterestRateController _interestRateController) public onlyOwner { interestRateController = _interestRateController; }
-    function setCollateralFeeController(ICollateralFeeController _collateralFeeController) public onlyOwner { collateralFeeController = _collateralFeeController; }
+    function setInterestRateModel(IRateModel _model) public onlyOwner { interestRateModel = _model; }
+    function setCollateralFeeModel(IRateModel _model) public onlyOwner { collateralFeeModel = _model; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
@@ -255,19 +250,6 @@ contract Core {
         collateralsData[collateral].prevSoftCap = getSoftCapUsd(collateral);
         collateralsData[collateral].softCapBps = softCapBps;
         collateralsData[collateral].lastSoftCapUpdate = block.timestamp;
-    }
-
-    function updateCollateralFeeController() external {
-        ICollateral collateral = ICollateral(msg.sender);
-        require(collateralsData[collateral].enabled, "onlyCollaterals");
-        uint capUsd = getCapUsd(collateral);
-        uint price = oracle.getCollateralPriceMantissa(
-            address(collateral),
-            getCollateralFactor(collateral),
-            collateral.totalAssets(),
-            capUsd
-        );
-        collateralFeeController.update(address(collateral), price, capUsd);
     }
 
     function getSoftCapUsd(ICollateral collateral) public view returns (uint) {
@@ -465,27 +447,31 @@ contract Core {
         return true;
     }
 
-    function getCollateralFeeBps(address collateral) external view returns (uint256, address) {
-        if (collateralsData[ICollateral(collateral)].enabled == false) return (0, address(0));
-        if(feeDestination == address(0)) return (0, address(0));
-
+    function getCollateralFeeBps(address collateral, uint lastFee, uint lastAccrued) external view returns (uint256) {
+        uint capUsd = getCapUsd(ICollateral(collateral));
+        uint price = oracle.viewCollateralPriceMantissa(
+            collateral,
+            getCollateralFactor(ICollateral(collateral)),
+            ICollateral(collateral).totalAssets(),
+            capUsd
+        );
+        uint depositedUsd = ICollateral(collateral).totalAssets() * price / MANTISSA;
+        uint util = capUsd > 0 ? depositedUsd * 10000 / capUsd : 10000;
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getCollateralFeeControllerFeeBps{gas:passedGas}(collateral) returns (uint256 _feeBps) {
+        try Core(this).getCollateralFeeModelFeeBps{gas:passedGas}(collateral, util, lastFee, lastAccrued) returns (uint256 _feeBps) {
             if(_feeBps > MAX_COLLATERAL_FACTOR_BPS) _feeBps = MAX_COLLATERAL_FACTOR_BPS;
-            return (_feeBps, feeDestination);
+            return _feeBps;
         } catch {
-            return (0, address(0));
+            return 0;
         }
     }
 
-    function getInterestRateControllerBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        require(msg.sender == address(this), "onlyCore");
-        return interestRateController.getBorrowRateBps(pool, util, lastBorrowRate, lastAccrued);
+    function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        return interestRateModel.getRateBps(pool, util, lastBorrowRate, lastAccrued);
     }
 
-    function getCollateralFeeControllerFeeBps(address collateral) external view returns (uint256) {
-        require(msg.sender == address(this), "onlyCore");
-        return collateralFeeController.getCollateralFeeBps(collateral);
+    function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        return collateralFeeModel.getRateBps(collateral, util, lastBorrowRate, lastAccrued);
     }
 
     function onPoolDeposit(uint256 amount) external returns (bool) {
@@ -597,11 +583,9 @@ contract Core {
         return true;
     }
 
-    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        if (interestRateController == IInterestRateController(address(0))) return 0;
-        
+    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {        
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getInterestRateControllerBorrowRate{gas: passedGas}(pool, util, lastBorrowRate, lastAccrued) returns (uint256 _borrowRateBps) {
+        try Core(this).getInterestRateModelBorrowRate{gas: passedGas}(pool, util, lastBorrowRate, lastAccrued) returns (uint256 _borrowRateBps) {
             if(_borrowRateBps > MAX_BORROW_RATE_BPS) _borrowRateBps = MAX_BORROW_RATE_BPS;
             return _borrowRateBps;
         } catch {

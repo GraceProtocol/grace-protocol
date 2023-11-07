@@ -94,8 +94,7 @@ contract Pool {
     function updateBorrowRate(uint _lastAccrued) internal {
         uint totalAssets = totalAssets();
         uint util = totalAssets == 0 ? 0 : totalDebt * 10000 / totalAssets;
-        uint borrowRate = core.getBorrowRateBps(address(this), util, lastBorrowRate, _lastAccrued);
-        lastBorrowRate = borrowRate;
+        lastBorrowRate = core.getBorrowRateBps(address(this), util, lastBorrowRate, _lastAccrued);
     }
 
     function totalAssets() public view returns (uint256) {

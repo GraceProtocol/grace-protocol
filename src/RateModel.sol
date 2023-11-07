@@ -7,14 +7,14 @@ interface ICore {
     function owner() external view returns (address);
 }
 
-contract InterestRateController {
+contract RateModel {
 
     using EMA for EMA.EMAState;
 
     uint constant KINK_BPS = 9000;
     uint constant HALF_LIFE = 1 days;
 
-    struct PoolState {
+    struct RateConfig {
         uint minRate;
         uint kinkRate;
         uint maxRate;
@@ -22,14 +22,14 @@ contract InterestRateController {
 
     address public immutable core;
 
-    mapping (address => PoolState) public poolStates;
+    mapping (address => RateConfig) public configs;
 
     constructor(address _core) {
         core = _core;
     }
 
-    function getCurveRate(address pool, uint util) public view returns (uint) {
-        PoolState memory state = poolStates[pool];
+    function getCurveRate(address target, uint util) public view returns (uint) {
+        RateConfig memory state = configs[target];
         if(util < KINK_BPS) {
             return state.minRate + util * (state.kinkRate - state.minRate) / KINK_BPS;
         } else {
@@ -37,20 +37,20 @@ contract InterestRateController {
         }
     }
 
-    function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        uint curveRate = getCurveRate(pool, util);
-        // apply EMA to smoothen rate change
+    function getRateBps(address target, uint util, uint lastRate, uint lastAccrued) external view returns (uint256) {
+        uint curveRate = getCurveRate(target, util);
+        // apply EMA to create rate lag
         EMA.EMAState memory rateEMA;
         rateEMA.lastUpdate = lastAccrued;
-        rateEMA.ema = lastBorrowRate;
+        rateEMA.ema = lastRate;
         rateEMA = rateEMA.update(curveRate, HALF_LIFE);
         return rateEMA.ema;
     }
 
-    function setPoolRates(address pool, uint minRate, uint kinkRate, uint maxRate) external {
+    function setTargetRates(address target, uint minRate, uint kinkRate, uint maxRate) external {
         require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
-        poolStates[pool].minRate = minRate;
-        poolStates[pool].kinkRate = kinkRate;
-        poolStates[pool].maxRate = maxRate;
+        configs[target].minRate = minRate;
+        configs[target].kinkRate = kinkRate;
+        configs[target].maxRate = maxRate;
     }
 }
