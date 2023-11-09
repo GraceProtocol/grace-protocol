@@ -47,8 +47,7 @@ contract EMATest is Test {
         
         skip(100); // 100 seconds manipulation
         emaState = emaState.update(1000 * 1e18, halfLife); // artificially inflated by 1000
-        assertApproxEqAbs(emaState.ema, 1 * 1e18, uint(1e18));
-        
+        assertApproxEqAbs(emaState.ema, 1 * 1e18, uint(1e18));   
     }
 
     function test_wadExp() public {

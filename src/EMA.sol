@@ -21,6 +21,17 @@ library EMA {
         return state;
     }
 
+    function simulateEMA(EMAState memory state, uint input, uint halfLife) view internal returns (uint) {
+        uint dt = block.timestamp - state.lastUpdate;
+        if(dt > 0 && halfLife > 0) {
+            halfLife = halfLife * 1e18 / 693147180559945300; // halfLife / ln(2)
+            uint alpha = uint(wadExp(int256(-int256(dt) * 1e18 / int256(halfLife))));
+            return (input * (10**18 - alpha) + state.ema * alpha) / 10**18;
+        } else {
+            return state.ema;
+        }
+    }
+
     // from Solmate https://github.com/transmissions11/solmate/blob/e0e9ff05d8aa5c7c48465511f85a6efdf5d5c30d/src/utils/SignedWadMath.sol#L106C5-L106C5
     function wadExp(int256 x) pure internal returns (int256 r) {
         unchecked {

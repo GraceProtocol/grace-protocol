@@ -46,8 +46,7 @@ contract RateModel {
         EMA.EMAState memory rateEMA;
         rateEMA.lastUpdate = lastAccrued;
         rateEMA.ema = lastRate;
-        rateEMA = rateEMA.update(curveRate, HALF_LIFE);
-        return rateEMA.ema;
+        return rateEMA.simulateEMA(curveRate, HALF_LIFE);
     }
 
     function setTargetRates(address target, uint minRate, uint kinkRate, uint maxRate) external {
