@@ -74,6 +74,7 @@ contract Core {
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
+    uint public writeOffIncentiveBps = 1000; // 10%
     uint public supplyEMASum;
     uint256 public lockDepth;
     address public owner;
@@ -113,10 +114,17 @@ contract Core {
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
     function setInterestRateModel(IRateModel _model) public onlyOwner { interestRateModel = _model; }
     function setCollateralFeeModel(IRateModel _model) public onlyOwner { collateralFeeModel = _model; }
-    function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner { liquidationIncentiveBps = _liquidationIncentiveBps; }
+    function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner {
+        require(_liquidationIncentiveBps <= 10000, "liquidationIncentiveTooHigh");
+        liquidationIncentiveBps = _liquidationIncentiveBps;
+    }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
     function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner { dailyBorrowLimitUsd = _dailyBorrowLimitUsd; }
+    function setWriteOffIncentiveBps(uint _writeOffIncentiveBps) public onlyOwner {
+        require(_writeOffIncentiveBps <= 10000, "writeOffIncentiveTooHigh");
+        writeOffIncentiveBps = _writeOffIncentiveBps;
+    }
     function setGuardian(address _guardian) public onlyOwner { guardian = _guardian; }
     function setPoolBorrowPaused(IPool pool, bool paused) public {
         require(msg.sender == guardian || msg.sender == owner, "onlyGuardianOrOwner");
@@ -733,7 +741,10 @@ contract Core {
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
             ICollateral thisCollateral = userCollaterals[borrower][i];
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
-            thisCollateral.seize(borrower, thisCollateralBalance, feeDestination);
+            uint reward = thisCollateralBalance * writeOffIncentiveBps / 10000;
+            uint fee = thisCollateralBalance - reward;
+            thisCollateral.seize(borrower, fee, feeDestination);
+            thisCollateral.seize(borrower, reward, msg.sender);
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];
