@@ -32,7 +32,7 @@ contract MainnetDeployerScript is Script {
         // deploy core
         Core core = new Core(deployer, address(poolDeployer), address(collateralDeployer));
         // deploy interest rate model
-        RateModel rateModel = new RateModel(address(core));
+        RateModel rateModel = new RateModel(9000, 3 days, 0, 2000, 10000);
         // connect them to core
         core.setDefaultInterestRateModel(IRateModel(address(rateModel)));
         core.setDefaultCollateralFeeModel(IRateModel(address(rateModel)));

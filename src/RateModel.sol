@@ -6,54 +6,41 @@ pragma solidity 0.8.21;
 
 import "./EMA.sol";
 
-interface ICore {
-    function owner() external view returns (address);
-}
-
 contract RateModel {
 
     using EMA for EMA.EMAState;
 
-    uint constant KINK_BPS = 9000;
-    uint constant HALF_LIFE = 3 days;
+    uint immutable public KINK_BPS;
+    uint immutable public HALF_LIFE;
+    uint immutable public MIN_RATE;
+    uint immutable public KINK_RATE;
+    uint immutable public MAX_RATE;
 
-    struct RateConfig {
-        uint minRate;
-        uint kinkRate;
-        uint maxRate;
+    constructor(uint _kinkBps, uint _halfLife, uint _minRate, uint _kinkRate, uint _maxRate) {
+        require(_kinkBps <= 10000, "kinkBps must be <= 10000");
+        require(_minRate <= _kinkRate && _kinkRate <= _maxRate, "minRate <= kinkRate <= maxRate");
+        require(_halfLife > 0, "halfLife must be > 0");
+        KINK_BPS = _kinkBps;
+        HALF_LIFE = _halfLife;
+        MIN_RATE = _minRate;
+        KINK_RATE = _kinkRate;
+        MAX_RATE = _maxRate;
     }
 
-    address public immutable core;
-
-    mapping (address => RateConfig) public configs;
-
-    constructor(address _core) {
-        core = _core;
-    }
-
-    function getCurveRate(address target, uint util) public view returns (uint) {
-        RateConfig memory state = configs[target];
+    function getTargetRate(uint util) public view returns (uint) {
         if(util < KINK_BPS) {
-            return state.minRate + util * (state.kinkRate - state.minRate) / KINK_BPS;
+            return MIN_RATE + util * (KINK_RATE - MIN_RATE) / KINK_BPS;
         } else {
-            return state.kinkRate + (util - KINK_BPS) * (state.maxRate - state.kinkRate) / (10000 - KINK_BPS);
+            return KINK_RATE + (util - KINK_BPS) * (MAX_RATE - KINK_RATE) / (10000 - KINK_BPS);
         }
     }
 
-    function getRateBps(address target, uint util, uint lastRate, uint lastAccrued) external view returns (uint256) {
-        uint curveRate = getCurveRate(target, util);
+    function getRateBps(uint util, uint lastRate, uint lastAccrued) external view returns (uint256) {
+        uint curveRate = getTargetRate(util);
         // apply EMA to create rate lag
         EMA.EMAState memory rateEMA;
         rateEMA.lastUpdate = lastAccrued;
         rateEMA.ema = lastRate;
         return rateEMA.simulateEMA(curveRate, HALF_LIFE);
-    }
-
-    function setTargetRates(address target, uint minRate, uint kinkRate, uint maxRate) external {
-        require(msg.sender == ICore(core).owner(), "onlyCoreOwner");
-        require(minRate <= kinkRate && kinkRate <= maxRate, "invalidRates");
-        configs[target].minRate = minRate;
-        configs[target].kinkRate = kinkRate;
-        configs[target].maxRate = maxRate;
     }
 }
