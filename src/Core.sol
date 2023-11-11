@@ -13,7 +13,7 @@ interface ICollateralDeployer {
 }
 
 interface IRateModel {
-    function getRateBps(address target, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
+    function getRateBps(uint util, uint lastRate, uint lastAccrued) external view returns (uint256);
 }
 
 interface IPool {
@@ -45,6 +45,7 @@ contract Core {
 
     struct CollateralConfig {
         bool enabled;
+        IRateModel feeModel;
         uint collateralFactorBps;
         uint hardCap;
         uint softCapBps;
@@ -62,6 +63,7 @@ contract Core {
 
     struct PoolConfig {
         bool enabled;
+        IRateModel interestRateModel;
         uint depositCap;
         bool borrowPaused;
         bool borrowSuspended;
@@ -79,8 +81,8 @@ contract Core {
     uint256 public lockDepth;
     address public owner;
     Oracle public immutable oracle = new Oracle();
-    IRateModel public interestRateModel;
-    IRateModel public collateralFeeModel;
+    IRateModel public defaultInterestRateModel;
+    IRateModel public defaultCollateralFeeModel;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
@@ -112,8 +114,8 @@ contract Core {
 
     function setOwner(address _owner) public onlyOwner { owner = _owner; }
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
-    function setInterestRateModel(IRateModel _model) public onlyOwner { interestRateModel = _model; }
-    function setCollateralFeeModel(IRateModel _model) public onlyOwner { collateralFeeModel = _model; }
+    function setDefaultInterestRateModel(IRateModel _model) public onlyOwner { defaultInterestRateModel = _model; }
+    function setDefaultCollateralFeeModel(IRateModel _model) public onlyOwner { defaultCollateralFeeModel = _model; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner {
         require(_liquidationIncentiveBps <= 10000, "liquidationIncentiveTooHigh");
         liquidationIncentiveBps = _liquidationIncentiveBps;
@@ -165,7 +167,14 @@ contract Core {
         lockDepth -= 1;
     }
 
-    function deployPool(string memory name, string memory symbol, address underlying, address feed, uint depositCap) public onlyOwner returns (address) {
+    function deployPool(
+        string memory name,
+        string memory symbol,
+        address underlying,
+        address feed,
+        address interestRateModel,
+        uint depositCap
+    ) public onlyOwner returns (address) {
         require(underlyingToPool[underlying] == IPool(address(0)), "underlyingAlreadyAdded");
         uint size;
         assembly { size := extcodesize(underlying) }
@@ -175,6 +184,7 @@ contract Core {
         emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({
             enabled: true,
+            interestRateModel: IRateModel(interestRateModel),
             depositCap: depositCap,
             borrowPaused: false,
             borrowSuspended: false,
@@ -184,6 +194,16 @@ contract Core {
         poolList.push(pool);
         underlyingToPool[underlying] = pool;
         return address(pool);
+    }
+
+    function deployPool(
+        string memory name,
+        string memory symbol,
+        address underlying,
+        address feed,
+        uint depositCap
+    ) external returns (address) {
+        return deployPool(name, symbol, underlying, feed, address(defaultInterestRateModel), depositCap);
     }
 
     function setPoolFeed(IPool pool, address feed) public onlyOwner {
@@ -196,15 +216,21 @@ contract Core {
         poolsData[pool].depositCap = depositCap;
     }
 
+    function setPoolInterestRateModel(IPool pool, address interestRateModel) external onlyOwner {
+        require(poolsData[pool].enabled == true, "poolNotAdded");
+        poolsData[pool].interestRateModel = IRateModel(interestRateModel);
+    }
+
     function deployCollateral(
         string memory name,
         string memory symbol,
         address underlying,
         address feed,
+        address feeModel,
         uint collateralFactor,
         uint hardCapUsd,
         uint softCapBps
-        ) public onlyOwner returns (address) {
+    ) public onlyOwner returns (address) {
         require(underlyingToCollateral[underlying] == ICollateral(address(0)), "underlyingAlreadyAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
         require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
@@ -215,6 +241,7 @@ contract Core {
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
+            feeModel: IRateModel(feeModel),
             hardCap: hardCapUsd,
             softCapBps: softCapBps,
             depositPaused: false,
@@ -232,9 +259,26 @@ contract Core {
         return address(collateral);
     }
 
+    function deployCollateral(
+        string memory name,
+        string memory symbol,
+        address underlying,
+        address feed,
+        uint collateralFactor,
+        uint hardCapUsd,
+        uint softCapBps
+    ) external returns (address) {
+        return deployCollateral(name, symbol, underlying, feed, address(defaultCollateralFeeModel), collateralFactor, hardCapUsd, softCapBps);
+    }
+
     function setCollateralFeed(ICollateral collateral, address feed) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
         oracle.setCollateralFeed(address(collateral.asset()), feed);
+    }
+
+    function setCollateralFeeModel(ICollateral collateral, address feeModel) external onlyOwner {
+        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
+        collateralsData[collateral].feeModel = IRateModel(feeModel);
     }
 
     function setCollateralFactor(ICollateral collateral, uint collateralFactor) public onlyOwner {
@@ -475,11 +519,13 @@ contract Core {
     }
 
     function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        return interestRateModel.getRateBps(pool, util, lastBorrowRate, lastAccrued);
+        IRateModel interestRateModel = poolsData[IPool(pool)].interestRateModel;
+        return interestRateModel.getRateBps(util, lastBorrowRate, lastAccrued);
     }
 
     function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        return collateralFeeModel.getRateBps(collateral, util, lastBorrowRate, lastAccrued);
+        IRateModel collateralFeeModel = collateralsData[ICollateral(collateral)].feeModel;
+        return collateralFeeModel.getRateBps(util, lastBorrowRate, lastAccrued);
     }
 
     function onPoolDeposit(uint256 amount) external returns (bool) {

@@ -34,8 +34,8 @@ contract MainnetDeployerScript is Script {
         // deploy interest rate model
         RateModel rateModel = new RateModel(address(core));
         // connect them to core
-        core.setInterestRateModel(IRateModel(address(rateModel)));
-        core.setCollateralFeeModel(IRateModel(address(rateModel)));
+        core.setDefaultInterestRateModel(IRateModel(address(rateModel)));
+        core.setDefaultCollateralFeeModel(IRateModel(address(rateModel)));
         // Deploy Timelock
         Timelock timelock = new Timelock(deployer);
         // deploy GRACE
