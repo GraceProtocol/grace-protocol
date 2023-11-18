@@ -119,20 +119,39 @@ contract RecurringBond {
 
     function deposit(uint amount, address recipient) external {
         updateIndex(recipient);
-        require(isAuctionActive(), "auction is not active");
-        balances[recipient] = balanceOf(recipient) + amount;
+        if(isAuctionActive()) {
+            balances[recipient] = balanceOf(recipient) + amount;
+            emit Deposit(msg.sender, recipient, amount);
+        } else { // add preorder
+            uint currentCycle = getCycle();
+            accountCyclePreorder[recipient][currentCycle] += amount;
+            cyclePreorders[currentCycle] += amount;
+            balances[recipient] += amount;
+            emit Preorder(msg.sender, recipient, amount);
+        }
         deposits += amount;
         asset.transferFrom(msg.sender, address(this), amount);
-        emit Deposit(msg.sender, recipient, amount);
     }
 
-    function withdraw(uint amount) external {
-        updateIndex(msg.sender);
-        require(isAuctionActive(), "auction is not active");
-        balances[msg.sender] = balanceOf(msg.sender) - amount;
+    function withdraw(uint amount, address recipient, address owner) external {
+        updateIndex(owner);
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - amount;
+        }
+        if(isAuctionActive()) {
+            balances[owner] = balanceOf(owner) - amount;
+            emit Withdraw(msg.sender, recipient, owner, amount);
+        } else { // cancel preorder
+            uint currentCycle = getCycle();
+            accountCyclePreorder[owner][currentCycle] -= amount;
+            cyclePreorders[currentCycle] -= amount;
+            balances[owner] -= amount;
+            emit CancelPreorder(msg.sender, recipient, owner, amount);
+        }
         deposits -= amount;
-        asset.transfer(msg.sender, amount);
-        emit Withdraw(msg.sender, amount);
+        asset.transfer(recipient, amount);
     }
 
     function totalPreorders() external view returns (uint) {
@@ -143,35 +162,6 @@ contract RecurringBond {
     function preorderOf(address account) external view returns (uint) {
         uint currentCycle = getCycle();
         return accountCyclePreorder[account][currentCycle];
-    }
-
-    function preorder(uint amount, address recipient) external {
-        updateIndex(recipient);
-        require(!isAuctionActive(), "auction is active");
-        uint currentCycle = getCycle();
-        accountCyclePreorder[recipient][currentCycle] += amount;
-        cyclePreorders[currentCycle] += amount;
-        balances[recipient] += amount;
-        deposits += amount;
-        asset.transferFrom(msg.sender, address(this), amount);
-        emit Preorder(msg.sender, recipient, amount);
-    }
-
-    function cancelPreorder(uint amount, address recipient, address owner) external {
-        updateIndex(owner);
-        require(!isAuctionActive(), "auction is active");
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - amount;
-        }
-        uint currentCycle = getCycle();
-        accountCyclePreorder[owner][currentCycle] -= amount;
-        cyclePreorders[currentCycle] -= amount;
-        balances[owner] -= amount;
-        deposits -= amount;
-        asset.transfer(recipient, amount);
-        emit CancelPreorder(msg.sender, recipient, owner, amount);
     }
 
     function claimable(address user) public view returns(uint) {
@@ -281,7 +271,7 @@ contract RecurringBond {
     event Transfer(address indexed from, address indexed to, uint value);
     event Approval(address indexed owner, address indexed spender, uint value);
     event Deposit(address indexed caller, address indexed owner, uint amount);
-    event Withdraw(address indexed owner, uint amount);
+    event Withdraw(address indexed caller, address indexed recipient, address indexed owner, uint amount);
     event Preorder(address indexed caller, address indexed owner, uint amount);
     event CancelPreorder(address indexed caller, address indexed recipient, address indexed owner, uint amount);
     event Claim(address indexed owner, uint amount);

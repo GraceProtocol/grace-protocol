@@ -46,7 +46,7 @@ contract Oracle {
     }
 
     function getCappedPrice(uint price, uint totalCollateral, uint capUsd) internal pure returns (uint) {
-        if (totalCollateral == 0) return price;
+        if (totalCollateral == 0) return capUsd < price ? capUsd : price;
         uint cappedPrice = capUsd * 1e18 / totalCollateral;
         return cappedPrice < price ? cappedPrice : price;
     }
