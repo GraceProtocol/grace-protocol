@@ -88,13 +88,14 @@ contract RecurringBond {
 
     function updateIndex(address user) internal {
         uint deltaCycles = getCycle() - lastUpdateCycle;
-        if(deltaCycles > 0 && !isAuctionActive()) {
+        if(isAuctionActive()) deltaCycles--;
+        if(deltaCycles > 0) {
             if(deposits > 0) {
                 uint rewardsAccrued = deltaCycles * rewardBudget * MANTISSA;
                 rewardIndexMantissa += rewardsAccrued / deposits;
                 rewardBudget = nextRewardBudget;
             }
-            lastUpdateCycle = getCycle();
+            lastUpdateCycle += deltaCycles;
         }
 
         uint deltaIndex = rewardIndexMantissa - accountIndexMantissa[user];
@@ -166,8 +167,9 @@ contract RecurringBond {
 
     function claimable(address user) public view returns(uint) {
         uint deltaCycles = getCycle() - lastUpdateCycle;
-        uint rewardsAccrued; // = deltaT * rewardRate * mantissa;
-        if(deltaCycles > 0 && !isAuctionActive()) {
+        if(isAuctionActive()) deltaCycles--;
+        uint rewardsAccrued;
+        if(deltaCycles > 0) {
             rewardsAccrued = deltaCycles * rewardBudget * MANTISSA;
         }
         uint _rewardIndexMantissa = deposits > 0 ? rewardIndexMantissa + (rewardsAccrued / deposits) : rewardIndexMantissa;
