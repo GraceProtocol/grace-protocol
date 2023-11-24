@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import "forge-std/Test.sol";
 import "../src/Oracle.sol";
-import "../src/FixedPriceFeed.sol";
+import "./mocks/FixedPriceFeed.sol";
 import "./mocks/ERC20.sol";
 
 contract OracleTest is Test, Oracle {
@@ -19,6 +19,19 @@ contract OracleTest is Test, Oracle {
         assertEq(oracle.core(), address(this));
     }
 
+    function test_setPoolFixedPrice() public {
+        // success case
+        oracle.setPoolFixedPrice(address(2), 1e18);
+        assertEq(oracle.poolFixedPrices(address(2)), 1e18);
+        assertEq(oracle.viewDebtPriceMantissa(address(2)), 1e18);
+        assertEq(oracle.getDebtPriceMantissa(address(2)), 1e18);
+
+        // only core
+        vm.startPrank(UNAUTHORIZED);
+        vm.expectRevert("onlyCore");
+        oracle.setPoolFixedPrice(address(2), 1e18);
+    }
+ 
     function test_setCollateralFeed() public {
         // success case
         oracle.setCollateralFeed(address(2), address(3));

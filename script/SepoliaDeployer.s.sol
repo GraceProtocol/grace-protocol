@@ -10,7 +10,7 @@ import {Grace} from "src/GRACE.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {Timelock} from "src/Timelock.sol";
 import {GovernorAlpha} from "src/GovernorAlpha.sol";
-import {FixedPriceFeed} from "src/FixedPriceFeed.sol";
+import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
 import {BondFactory} from "src/BondFactory.sol";
 import {Helper} from "src/Helper.sol";
 
