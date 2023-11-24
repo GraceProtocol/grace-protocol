@@ -198,4 +198,127 @@ contract RecurringBondTest is Test {
         assertEq(reward.balanceOf(address(handler)), 1000e18);
     }
 
+    function test_claim() public {
+        vm.warp(1);
+        handler.deposit(1e18);
+        vm.warp(7 days + 1);
+        assertEq(bond.claimable(address(handler)), 1000e18);
+        handler.claim();
+        assertEq(reward.balanceOf(address(handler)), 1000e18);
+        assertEq(bond.claimable(address(handler)), 0);
+        assertEq(bond.accruedRewards(address(handler)), 0);
+    }
+
+    function test_transfer() public {
+        asset.mint(address(this), 2e18);
+        asset.approve(address(bond), 2e18);
+        vm.warp(1); // auction period starts
+        bond.deposit(1e18, address(this));
+        vm.warp(1 days + 1); // auction period elapses
+        bond.deposit(1e18, address(this)); // preorder
+        assertEq(bond.preorderOf(address(this)), 1e18);
+        vm.expectRevert();
+        bond.transfer(address(1), 2e18); // revert
+        bond.transfer(address(1), 1e18); // success
+        assertEq(bond.balanceOf(address(this)), 0);
+        assertEq(bond.preorderOf(address(this)), 1e18);
+        assertEq(bond.balanceOf(address(1)), 1e18);
+        vm.warp(7 days + 1); // next auction period
+        assertEq(bond.balanceOf(address(this)), 1e18);
+        bond.transfer(address(1), 1e18); // success
+        assertEq(bond.balanceOf(address(this)), 0);
+        assertEq(bond.balanceOf(address(1)), 2e18);
+    }
+
+    function test_approveTransferFrom() public {
+        asset.mint(address(this), 2e18);
+        asset.approve(address(bond), 2e18);
+        vm.warp(1); // auction period starts
+        bond.deposit(1e18, address(this));
+        vm.warp(1 days + 1); // auction period elapses
+        bond.deposit(1e18, address(this)); // preorder
+        assertEq(bond.preorderOf(address(this)), 1e18);
+        bond.approve(address(1), 2e18);
+        vm.startPrank(address(1));
+        vm.expectRevert();
+        bond.transferFrom(address(this), address(1), 2e18); // revert
+        bond.transferFrom(address(this), address(1), 1e18); // success
+        assertEq(bond.balanceOf(address(this)), 0);
+        assertEq(bond.preorderOf(address(this)), 1e18);
+        assertEq(bond.balanceOf(address(1)), 1e18);
+        vm.warp(7 days + 1); // next auction period
+        assertEq(bond.balanceOf(address(this)), 1e18);
+        bond.transferFrom(address(this), address(1), 1e18); // success
+        assertEq(bond.balanceOf(address(this)), 0);
+        assertEq(bond.balanceOf(address(1)), 2e18);
+    }
+
+    function test_invalidateNonce() public {
+        assertEq(bond.nonces(address(this)), 0);
+        bond.invalidateNonce();
+        assertEq(bond.nonces(address(this)), 1);
+    }
+
+    function test_setBudget() public {
+        vm.startPrank(address(1));
+        vm.expectRevert("only factory");
+        bond.setBudget(2000e18);
+        vm.stopPrank();
+
+        handler.deposit(1e18); // we'll need it to claim
+
+        bond.setBudget(2000e18);
+        assertEq(bond.rewardBudget(), 1000e18); // auction active
+        assertEq(bond.nextRewardBudget(), 2000e18);
+
+        vm.warp(1 days + 1);
+        handler.claim(); // trigger budget change
+        assertEq(bond.rewardBudget(), 2000e18);
+        bond.setBudget(3000e18);
+        assertEq(bond.rewardBudget(), 3000e18); // auction inactive
+        assertEq(bond.nextRewardBudget(), 3000e18);
+    }
+
+    function test_totalPreorders() public {
+        asset.mint(address(this), 1e18);
+        asset.mint(address(1), 1e18);
+        asset.approve(address(bond), 1e18);
+        vm.warp(1 days + 1);
+        bond.deposit(1e18, address(this));
+        assertEq(bond.totalPreorders(), 1e18);
+        vm.startPrank(address(1));
+        asset.approve(address(bond), 1e18);
+        bond.deposit(1e18, address(1));
+        assertEq(bond.totalPreorders(), 2e18);
+    }
+
+    function test_preorderOf() public {
+        asset.mint(address(this), 1e18);
+        asset.mint(address(1), 1e18);
+        asset.approve(address(bond), 1e18);
+        vm.warp(1 days + 1);
+        bond.deposit(1e18, address(this));
+        assertEq(bond.preorderOf(address(this)), 1e18);
+    }
+
+    function test_totalSupply() public {
+        handler.deposit(1e18);
+        assertEq(bond.totalSupply(), 1e18);
+        vm.warp(1 days + 1);
+        handler.deposit(1e18);
+        assertEq(bond.totalSupply(), 1e18); // without preorders
+        vm.warp(7 days + 1);
+        assertEq(bond.totalSupply(), 2e18);
+    }
+
+    function test_balanceOf() public {
+        handler.deposit(1e18);
+        assertEq(bond.balanceOf(address(handler)), 1e18);
+        vm.warp(1 days + 1);
+        handler.deposit(1e18);
+        assertEq(bond.balanceOf(address(handler)), 1e18); // without preorders
+        vm.warp(7 days + 1);
+        assertEq(bond.balanceOf(address(handler)), 2e18);
+    }
+
 }

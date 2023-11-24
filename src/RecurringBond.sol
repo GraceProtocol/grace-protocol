@@ -83,7 +83,10 @@ contract RecurringBond {
     }
 
     function balanceOf(address user) public view returns (uint) {
-        return balances[user] - accountCyclePreorder[user][getCycle()];
+        uint preorder = accountCyclePreorder[user][getCycle()];
+        uint bal = balances[user];
+        if(preorder > bal) return 0;
+        return bal - preorder;
     }
 
     function updateIndex(address user) internal {
@@ -208,17 +211,17 @@ contract RecurringBond {
         }
     }
 
-    function getCurrentBondYield(uint amount) external view returns (uint) {
-        if (deposits == 0) return rewardBudget;
-        return rewardBudget * amount / deposits;
+    function estimateBondYield(uint amount) external view returns (uint) {
+        return rewardBudget * amount / (deposits + amount);
     }
 
     function transfer(address recipient, uint256 amount) external returns (bool) {
         updateIndex(msg.sender);
         updateIndex(recipient);
         require(recipient != address(0), "ERC20: transfer to the zero address");
-        balances[msg.sender] = balanceOf(msg.sender) - amount;
-        balances[recipient] = balanceOf(recipient) + amount;
+        require(balances[msg.sender] - amount >= accountCyclePreorder[msg.sender][getCycle()], "Cannot transfer more than balance minus preorder");
+        balances[msg.sender] -= amount;
+        balances[recipient] += amount;
         emit Transfer(msg.sender, recipient, amount);
         return true;
     }
@@ -254,8 +257,9 @@ contract RecurringBond {
         updateIndex(recipient);
         require(recipient != address(0), "ERC20: transfer to the zero address");
         allowance[sender][msg.sender] -= amount;
-        balances[sender] = balanceOf(sender) - amount;
-        balances[recipient] = balanceOf(recipient) + amount;
+        require(balances[sender] - amount >= accountCyclePreorder[sender][getCycle()], "Cannot transfer more than balance minus preorder");
+        balances[sender] -= amount;
+        balances[recipient] += amount;
         emit Transfer(sender, recipient, amount);
         return true;
     }
