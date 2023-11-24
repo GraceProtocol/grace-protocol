@@ -16,6 +16,7 @@ contract Oracle {
     uint constant WEEK = 7 days;
     mapping(address => address) public collateralFeeds;
     mapping(address => address) public poolFeeds;
+    mapping(address => uint) public poolFixedPrices;
     mapping (address => mapping(uint => uint)) public weeklyLows; // token => week => price
     mapping (address => mapping(uint => uint)) public weeklyHighs; // token => week => price
 
@@ -30,6 +31,7 @@ contract Oracle {
 
     function setCollateralFeed(address token, address feed) onlyCore external { collateralFeeds[token] = feed; }
     function setPoolFeed(address token, address feed) onlyCore external { poolFeeds[token] = feed; }
+    function setPoolFixedPrice(address token, uint price) onlyCore external { poolFixedPrices[token] = price; }
 
     function getNormalizedPrice(address token, address feed) internal view returns (uint normalizedPrice) {
         (,int256 signedPrice,,,) = IChainlinkFeed(feed).latestRoundData();
@@ -89,6 +91,7 @@ contract Oracle {
     }
 
     function getDebtPriceMantissa(address token) external onlyCore returns (uint256) {
+        if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
             // get normalized price
@@ -145,6 +148,7 @@ contract Oracle {
 
     }
     function viewDebtPriceMantissa(address token) external view returns (uint256) {
+        if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
             // get normalized price
