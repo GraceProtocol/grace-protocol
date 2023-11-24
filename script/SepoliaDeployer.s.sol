@@ -18,7 +18,7 @@ interface IERC20Metadata {
     function symbol() external view returns (string memory);
 }
 
-contract MainnetDeployerScript is Script {
+contract SepoliaDeployerScript is Script {
     function setUp() public {}
 
     function run() public {
