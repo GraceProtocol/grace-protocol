@@ -12,7 +12,7 @@ contract ReserveTest is Test {
 
     function setUp() public {
         grace = new ERC20();
-        reserve = new Reserve(IERC20(address(grace)), address(this));
+        reserve = new Reserve(address(grace), address(this));
     }
 
     function test_constructor() public {

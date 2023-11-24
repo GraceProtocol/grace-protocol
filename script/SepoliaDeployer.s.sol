@@ -41,7 +41,7 @@ contract SepoliaDeployerScript is Script {
         // deploy GRACE
         Grace grace = new Grace(deployer);
         // deploy Reserve
-        Reserve reserve = new Reserve(IERC20(address(grace)), address(timelock));
+        Reserve reserve = new Reserve(address(grace), address(timelock));
         // Set reserve as fee destination
         core.setFeeDestination(address(reserve));
         // WETH address used by Uniswap on Sepolia
