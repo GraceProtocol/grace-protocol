@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-interface IWETH {
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+interface IWETH is IERC20 {
     function deposit() external payable;
     function withdraw(uint wad) external;
-    function approve(address guy, uint wad) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
 }
 
 interface IPool {
@@ -44,12 +44,9 @@ interface IBond {
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
 
-interface IERC20 {
-    function approve(address spender, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-}
-
 contract Helper {
+
+    using SafeERC20 for IERC20;
 
     IWETH public immutable weth;
     
@@ -223,8 +220,8 @@ contract Helper {
 
     function depositAndBond(address pool, address bond, uint assets) external onlySameAsset(pool, bond){
         IERC20 asset = IERC20(IPool(pool).asset());
-        asset.transferFrom(msg.sender, address(this), assets);
-        asset.approve(pool, assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+        asset.forceApprove(pool, assets);
         uint shares = IPool(pool).deposit(assets, address(this));
         IERC20(pool).approve(bond, shares);
         IBond(bond).deposit(shares, msg.sender);
@@ -241,8 +238,8 @@ contract Helper {
     function mintAndBond(address pool, address bond, uint shares) external onlySameAsset(pool, bond){
         IERC20 asset = IERC20(IPool(pool).asset());
         uint assets = IPool(pool).previewMint(shares);
-        asset.transferFrom(msg.sender, address(this), assets);
-        asset.approve(pool, assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+        asset.forceApprove(pool, assets);
         IPool(pool).mint(shares, address(this));
         IERC20(pool).approve(bond, shares);
         IBond(bond).deposit(shares, msg.sender);
@@ -263,8 +260,8 @@ contract Helper {
 
     function depositAndPreorder(address pool, address bond, uint assets) external onlySameAsset(pool, bond){
         IERC20 asset = IERC20(IPool(pool).asset());
-        asset.transferFrom(msg.sender, address(this), assets);
-        asset.approve(pool, assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+        asset.forceApprove(pool, assets);
         uint shares = IPool(pool).deposit(assets, address(this));
         IERC20(pool).approve(bond, shares);
         IBond(bond).preorder(shares, msg.sender);
@@ -281,8 +278,8 @@ contract Helper {
     function mintAndPreorder(address pool, address bond, uint shares) external onlySameAsset(pool, bond){
         IERC20 asset = IERC20(IPool(pool).asset());
         uint assets = IPool(pool).previewMint(shares);
-        asset.transferFrom(msg.sender, address(this), assets);
-        asset.approve(pool, assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+        asset.forceApprove(pool, assets);
         IPool(pool).mint(shares, address(this));
         IERC20(pool).approve(bond, shares);
         IBond(bond).preorder(shares, msg.sender);

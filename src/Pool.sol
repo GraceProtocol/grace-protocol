@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 interface IPoolCore {
     function feeDestination() external view returns (address);
     function onPoolDeposit(uint256 amount) external returns (bool);
@@ -13,18 +15,14 @@ interface IPoolCore {
     function poolsData(address pool) external view returns (bool enabled, uint depositCap, bool borrowPaused, bool borrowSuspended);
 }
 
-interface IPoolUnderlying {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-}
-
 contract Pool {
+
+    using SafeERC20 for IERC20;
 
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
-    IPoolUnderlying public immutable asset;
+    IERC20 public immutable asset;
     IPoolCore public immutable core;
     uint256 internal constant MAX_UINT256 = 2**256 - 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -46,7 +44,7 @@ contract Pool {
     constructor(
         string memory _name,
         string memory _symbol,
-        IPoolUnderlying _asset,
+        IERC20 _asset,
         address _core
     ) {
         name = _name;
@@ -180,7 +178,7 @@ contract Pool {
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        asset.transferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(address(0), recipient, shares);
@@ -231,7 +229,7 @@ contract Pool {
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        asset.transferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(address(0), recipient, shares);
@@ -260,7 +258,7 @@ contract Pool {
         }
         totalSupply -= shares;
         balanceOf[owner] -= shares;
-        asset.transfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
@@ -290,7 +288,7 @@ contract Pool {
         }
         totalSupply -= shares;
         balanceOf[owner] -= shares;
-        asset.transfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
@@ -347,7 +345,7 @@ contract Pool {
         debtSharesOf[owner] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
-        asset.transfer(recipient, amount);
+        asset.safeTransfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
@@ -368,7 +366,7 @@ contract Pool {
         debtSharesOf[to] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= amount;
-        asset.transferFrom(msg.sender, address(this), amount);
+        asset.safeTransferFrom(msg.sender, address(this), amount);
         lastBalance = asset.balanceOf(address(this));
         updateBorrowRate(_lastAccrued);
     }
@@ -413,7 +411,7 @@ contract Pool {
     function pull(address _stuckToken, address dst, uint amount) external {
         require(msg.sender == address(core), "onlyCore");
         require(_stuckToken != address(asset), "cannotPullUnderlying");
-        IPoolUnderlying(_stuckToken).transfer(dst, amount);
+        IERC20(_stuckToken).safeTransfer(dst, amount);
     }
 
     function invalidateNonce() external {

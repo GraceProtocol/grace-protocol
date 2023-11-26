@@ -16,7 +16,7 @@ contract PoolTest is Test, MockCore {
         pool = new Pool(
             "Pool",
             "POOL",
-            IPoolUnderlying(address(asset)),
+            IERC20(address(asset)),
             address(this)
         );
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./EMA.sol";
 import "./Oracle.sol";
 
@@ -33,14 +34,9 @@ interface ICollateral {
     function pull(address _stuckToken, address dst, uint amount) external;
 }
 
-interface IERC20 {
-    function approve(address spender, uint256 amount) external returns (bool);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns(bool);
-}
-
 contract Core {
 
+    using SafeERC20 for IERC20;
     using EMA for EMA.EMAState;
 
     struct CollateralConfig {
@@ -721,8 +717,8 @@ contract Core {
             require(collateralIncentiveUsd <= maxLiquidationIncentiveUsd, "maxLiquidationIncentiveExceeded");
 
             IERC20 debtToken = IERC20(address(pool.asset()));
-            debtToken.transferFrom(msg.sender, address(this), debtAmount);
-            debtToken.approve(address(pool), debtAmount);
+            debtToken.safeTransferFrom(msg.sender, address(this), debtAmount);
+            debtToken.forceApprove(address(pool), debtAmount);
             pool.repay(borrower, debtAmount);
             collateral.seize(borrower, collateralReward, msg.sender);
         }
@@ -797,7 +793,7 @@ contract Core {
     }
 
     function pullFromCore(IERC20 token, address dst, uint amount) public onlyOwner {
-        token.transfer(dst, amount);
+        token.safeTransfer(dst, amount);
     }
 
     function pullFromPool(IPool pool, address token, address dst, uint amount) public onlyOwner {

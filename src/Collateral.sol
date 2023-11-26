@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 interface ICollateralCore {
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
@@ -13,18 +15,14 @@ interface ICollateralCore {
     function maxCollateralDeposit(address collateral) external view returns (uint);
 }
 
-interface ICollateralUnderlying {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-}
-
 contract Collateral {
+
+    using SafeERC20 for IERC20;
 
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
-    ICollateralUnderlying public immutable asset;
+    IERC20 public immutable asset;
     ICollateralCore public immutable core;
     uint public totalSupply;
     uint public lastAccrued;
@@ -39,7 +37,7 @@ contract Collateral {
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
 
-    constructor(string memory _name, string memory _symbol, ICollateralUnderlying _asset, address _core) {
+    constructor(string memory _name, string memory _symbol, IERC20 _asset, address _core) {
         name = _name;
         symbol = _symbol;
         asset = _asset;
@@ -79,7 +77,7 @@ contract Collateral {
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
         if(fee == 0) return _lastAccrued;
         lastAccrued = block.timestamp;
-        asset.transfer(core.feeDestination(), fee);
+        asset.safeTransfer(core.feeDestination(), fee);
     }
 
     function updateFee(uint _lastAccrued) internal {
@@ -165,7 +163,7 @@ contract Collateral {
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        asset.transferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(address(0), recipient, shares);
@@ -209,7 +207,7 @@ contract Collateral {
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        asset.transferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(address(0), recipient, shares);
@@ -232,7 +230,7 @@ contract Collateral {
         }
         totalSupply -= shares;
         balanceOf[owner] -= shares;
-        asset.transfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
@@ -251,7 +249,7 @@ contract Collateral {
         }
         totalSupply -= shares;
         balanceOf[owner] -= shares;
-        asset.transfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(owner, address(0), shares);
@@ -315,7 +313,7 @@ contract Collateral {
         uint shares = convertToShares(assets);
         totalSupply -= shares;
         balanceOf[account] -= shares;
-        asset.transfer(to, assets);
+        asset.safeTransfer(to, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Transfer(account, address(0), shares);
@@ -326,7 +324,7 @@ contract Collateral {
     function pull(address _stuckToken, address dst, uint amount) external {
         require(msg.sender == address(core), "onlyCore");
         require(_stuckToken != address(asset), "cannotPullUnderlying");
-        ICollateralUnderlying(_stuckToken).transfer(dst, amount);
+        IERC20(_stuckToken).safeTransfer(dst, amount);
     }
 
     function invalidateNonce() external {

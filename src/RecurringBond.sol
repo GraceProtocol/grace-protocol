@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-interface IERC20 {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-}
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IFactory {
     function transferReward(address recipient, uint amount) external;
 }
 
 contract RecurringBond {
+
+    using SafeERC20 for IERC20;
 
     string public name;
     string public symbol;
@@ -134,7 +132,7 @@ contract RecurringBond {
             emit Preorder(msg.sender, recipient, amount);
         }
         deposits += amount;
-        asset.transferFrom(msg.sender, address(this), amount);
+        asset.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     function withdraw(uint amount, address recipient, address owner) external {
@@ -155,7 +153,7 @@ contract RecurringBond {
             emit CancelPreorder(msg.sender, recipient, owner, amount);
         }
         deposits -= amount;
-        asset.transfer(recipient, amount);
+        asset.safeTransfer(recipient, amount);
     }
 
     function totalPreorders() external view returns (uint) {

@@ -5,6 +5,6 @@ import "./Pool.sol";
 
 contract PoolDeployer {
     function deployPool(string memory name, string memory symbol, address underlying) external returns (address pool) {
-        pool = address(new Pool(name, symbol, IPoolUnderlying(underlying), msg.sender));
+        pool = address(new Pool(name, symbol, IERC20(underlying), msg.sender));
     }
 }

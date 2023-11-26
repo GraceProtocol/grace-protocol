@@ -5,6 +5,6 @@ import "./Collateral.sol";
 
 contract CollateralDeployer {
     function deployCollateral(string memory name, string memory symbol, address underlying) external returns (address collateral) {
-        collateral = address(new Collateral(name, symbol, ICollateralUnderlying(underlying), msg.sender));
+        collateral = address(new Collateral(name, symbol, IERC20(underlying), msg.sender));
     }
 }

@@ -16,7 +16,7 @@ contract CollateralTest is Test, MockCore {
         collateral = new Collateral(
             "Collateral",
             "COL",
-            ICollateralUnderlying(address(asset)),
+            IERC20(address(asset)),
             address(this)
         );
     }
