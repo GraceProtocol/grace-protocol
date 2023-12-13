@@ -92,9 +92,9 @@ contract Core {
     mapping (address => IPool) public underlyingToPool;
     mapping (address => ICollateral) public underlyingToCollateral;
     mapping (ICollateral => mapping (address => bool)) public collateralUsers;
-    mapping (IPool => mapping (address => bool)) public poolUsers;
+    mapping (IPool => mapping (address => bool)) public poolBorrowers;
     mapping (address => ICollateral[]) public userCollaterals;
-    mapping (address => IPool[]) public userPools;
+    mapping (address => IPool[]) public borrowerPools;
     IPool[] public poolList;
     ICollateral[] public collateralList;
 
@@ -380,8 +380,8 @@ contract Core {
         
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < userPools[account].length; i++) {
-            IPool pool = userPools[account][i];
+        for (uint i = 0; i < borrowerPools[account].length; i++) {
+            IPool pool = borrowerPools[account][i];
             uint debt = pool.getDebtOf(account);
             uint price = oracle.viewDebtPriceMantissa(address(pool));
             uint debtUsd = debt * price / MANTISSA;
@@ -450,8 +450,8 @@ contract Core {
 
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < userPools[caller].length; i++) {
-            IPool pool = userPools[caller][i];
+        for (uint i = 0; i < borrowerPools[caller].length; i++) {
+            IPool pool = borrowerPools[caller][i];
             uint debt = pool.getDebtOf(caller);
             uint price = oracle.getDebtPriceMantissa(address(pool));
             uint debtUsd = debt * price / MANTISSA;
@@ -567,10 +567,10 @@ contract Core {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         require(poolsData[pool].borrowPaused == false, "borrowPaused");
-        // if first borrow, add to userPools and poolUsers
-        if(poolUsers[pool][caller] == false) {
-            poolUsers[pool][caller] = true;
-            userPools[caller].push(pool);
+        // if first borrow, add to borrowerPools and poolBorrowers
+        if(poolBorrowers[pool][caller] == false) {
+            poolBorrowers[pool][caller] = true;
+            borrowerPools[caller].push(pool);
         }
 
         // calculate assets
@@ -592,8 +592,8 @@ contract Core {
 
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < userPools[caller].length; i++) {
-            IPool thisPool = userPools[caller][i];
+        for (uint i = 0; i < borrowerPools[caller].length; i++) {
+            IPool thisPool = borrowerPools[caller][i];
             uint debt = thisPool.getDebtOf(caller);
             if(thisPool == pool) debt += amount;
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
@@ -618,16 +618,16 @@ contract Core {
 
         uint debt = pool.getDebtOf(recipient);
 
-        // if user repays all, remove from userPools and poolUsers
+        // if user repays all, remove from borrowerPools and poolBorrowers
         if(amount == debt) {
-            for (uint i = 0; i < userPools[recipient].length; i++) {
-                if(userPools[recipient][i] == pool) {
-                    userPools[recipient][i] = userPools[recipient][userPools[recipient].length - 1];
-                    userPools[recipient].pop();
+            for (uint i = 0; i < borrowerPools[recipient].length; i++) {
+                if(borrowerPools[recipient][i] == pool) {
+                    borrowerPools[recipient][i] = borrowerPools[recipient][borrowerPools[recipient].length - 1];
+                    borrowerPools[recipient].pop();
                     break;
                 }
             }
-            poolUsers[pool][recipient] = false;
+            poolBorrowers[pool][recipient] = false;
         }
 
         // reduce daily borrows
@@ -655,7 +655,7 @@ contract Core {
 
     function liquidate(address borrower, IPool pool, ICollateral collateral, uint debtAmount) lock external {
         require(collateralUsers[collateral][borrower], "notCollateralUser");
-        require(poolUsers[pool][borrower], "notPoolUser");
+        require(poolBorrowers[pool][borrower], "notPoolBorrower");
         require(debtAmount > 0, "zeroDebtAmount");
         if(debtAmount == type(uint256).max) debtAmount = pool.getDebtOf(borrower);
         {
@@ -664,8 +664,8 @@ contract Core {
                 uint poolDebtUsd = pool.getDebtOf(borrower) * oracle.getDebtPriceMantissa(address(pool)) / MANTISSA;
                 // calculate liabilities
                 liabilitiesUsd = poolDebtUsd;
-                for (uint i = 0; i < userPools[borrower].length; i++) {
-                    IPool thisPool = userPools[borrower][i];
+                for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+                    IPool thisPool = borrowerPools[borrower][i];
                     if (thisPool != pool) {
                         uint debt = thisPool.getDebtOf(borrower);
                         uint price = oracle.getDebtPriceMantissa(address(thisPool));
@@ -749,8 +749,8 @@ contract Core {
     function writeOff(address borrower) public lock {
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < userPools[borrower].length; i++) {
-            IPool thisPool = userPools[borrower][i];
+        for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+            IPool thisPool = borrowerPools[borrower][i];
             uint debt = thisPool.getDebtOf(borrower);
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
@@ -779,15 +779,15 @@ contract Core {
         require(assetsUsd < liabilitiesUsd, "insufficientLiabilities");
 
         // write off
-        for (uint i = 0; i < userPools[borrower].length; i++) {
-            IPool thisPool = userPools[borrower][i];
+        for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+            IPool thisPool = borrowerPools[borrower][i];
             uint totalAssets = thisPool.totalAssets(); // to use previous pool lastBalance
             uint debt = thisPool.getDebtOf(borrower);
             thisPool.writeOff(borrower);
             updateTotalSuppliedValue(thisPool, totalAssets - debt);
-            poolUsers[thisPool][borrower] = false;
+            poolBorrowers[thisPool][borrower] = false;
         }
-        delete userPools[borrower];
+        delete borrowerPools[borrower];
 
         // seize
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
