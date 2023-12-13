@@ -92,7 +92,7 @@ contract SepoliaDeployerScript is Script {
         uint depositCap) public returns (address pool, address bond) {
         string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
         string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
-        pool = core.deployPool(name, symbol, asset, feed, depositCap);
+        pool = core.deployPool(name, symbol, asset, feed, 0, depositCap);
         if(address(bondFactory) != address(0)) {
             string memory bondName = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " 1-week bond"));
             string memory bondSymbol = string(abi.encodePacked("gb", IERC20Metadata(asset).symbol(), "-1W"));

@@ -12,7 +12,6 @@ interface IOracleERC20 {
 
 contract Oracle {
 
-    address public immutable core;
     uint constant WEEK = 7 days;
     mapping(address => address) public collateralFeeds;
     mapping(address => address) public poolFeeds;
@@ -20,18 +19,9 @@ contract Oracle {
     mapping (address => mapping(uint => uint)) public weeklyLows; // token => week => price
     mapping (address => mapping(uint => uint)) public weeklyHighs; // token => week => price
 
-    constructor() {
-        core = msg.sender;
-    }
-
-    modifier onlyCore {
-        require(msg.sender == core, "onlyCore");
-        _;
-    }
-
-    function setCollateralFeed(address token, address feed) onlyCore external { collateralFeeds[token] = feed; }
-    function setPoolFeed(address token, address feed) onlyCore external { poolFeeds[token] = feed; }
-    function setPoolFixedPrice(address token, uint price) onlyCore external { poolFixedPrices[token] = price; }
+    function _setCollateralFeed(address token, address feed) internal { collateralFeeds[token] = feed; }
+    function _setPoolFeed(address token, address feed) internal { poolFeeds[token] = feed; }
+    function _setPoolFixedPrice(address token, uint price) internal { poolFixedPrices[token] = price; }
 
     function getNormalizedPrice(address token, address feed) internal view returns (uint normalizedPrice) {
         (,int256 signedPrice,,,) = IChainlinkFeed(feed).latestRoundData();
@@ -53,7 +43,7 @@ contract Oracle {
         return cappedPrice < price ? cappedPrice : price;
     }
 
-    function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external onlyCore returns (uint256) {
+    function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) internal returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
             // get normalized price, then cap it
@@ -90,7 +80,7 @@ contract Oracle {
         return 0;
     }
 
-    function getDebtPriceMantissa(address token) external onlyCore returns (uint256) {
+    function getDebtPriceMantissa(address token) internal returns (uint256) {
         if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
@@ -114,7 +104,7 @@ contract Oracle {
         return 0;
     }
 
-    function viewCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256) {
+    function viewCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) public view returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
             // get normalized price, then cap it
@@ -147,7 +137,7 @@ contract Oracle {
         return 0;
 
     }
-    function viewDebtPriceMantissa(address token) external view returns (uint256) {
+    function viewDebtPriceMantissa(address token) public view returns (uint256) {
         if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
