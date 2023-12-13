@@ -84,6 +84,8 @@ contract Core {
     uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
     uint constant MAX_COLLATERAL_FACTOR_BPS = 1000000; // 10,000%
     uint public dailyBorrowLimitUsd = 100000e18; // $100,000
+    uint public dailyBorrowLimitLastUpdate;
+    uint public lastDailyBorrowLimitRemainingUsd = 100000e18; // $100,000
     address public guardian;
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
@@ -93,7 +95,6 @@ contract Core {
     mapping (IPool => mapping (address => bool)) public poolUsers;
     mapping (address => ICollateral[]) public userCollaterals;
     mapping (address => IPool[]) public userPools;
-    mapping (uint => uint) public dailyBorrowsUsd;
     IPool[] public poolList;
     ICollateral[] public collateralList;
 
@@ -161,6 +162,16 @@ contract Core {
         lockDepth += 1;
         _;
         lockDepth -= 1;
+    }
+
+    function updateDailyBorrowLimit() internal {
+        uint timeElapsed = block.timestamp - dailyBorrowLimitLastUpdate;
+        if(timeElapsed == 0) return;
+        uint addedCapacity = timeElapsed * dailyBorrowLimitUsd / 1 days;
+        uint newLimit = lastDailyBorrowLimitRemainingUsd + addedCapacity;
+        if(newLimit > dailyBorrowLimitUsd) newLimit = dailyBorrowLimitUsd;
+        lastDailyBorrowLimitRemainingUsd = newLimit;
+        dailyBorrowLimitLastUpdate = block.timestamp;
     }
 
     function deployPool(
@@ -588,10 +599,9 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
             if(thisPool == pool) {
+                updateDailyBorrowLimit();
                 uint extraDebtUsd = amount * price / MANTISSA;
-                uint day = block.timestamp / 1 days;
-                require(extraDebtUsd + dailyBorrowsUsd[day] <= dailyBorrowLimitUsd, "dailyBorrowLimitExceeded");
-                dailyBorrowsUsd[day] += extraDebtUsd;
+                lastDailyBorrowLimitRemainingUsd -= extraDebtUsd;
             }
             liabilitiesUsd += debtUsd;
         }
@@ -621,13 +631,13 @@ contract Core {
         }
 
         // reduce daily borrows
+        updateDailyBorrowLimit();
         uint price = oracle.getDebtPriceMantissa(address(pool));
         uint repaidDebtUsd = amount * price / MANTISSA;
-        uint day = block.timestamp / 1 days;
-        if(dailyBorrowsUsd[day] > repaidDebtUsd) {
-            unchecked { dailyBorrowsUsd[day] -= repaidDebtUsd; }
+        if(lastDailyBorrowLimitRemainingUsd + repaidDebtUsd > dailyBorrowLimitUsd) {
+            lastDailyBorrowLimitRemainingUsd = dailyBorrowLimitUsd;
         } else {
-            dailyBorrowsUsd[day] = 0;
+            lastDailyBorrowLimitRemainingUsd += repaidDebtUsd;
         }
 
         return true;
@@ -785,8 +795,8 @@ contract Core {
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             uint reward = thisCollateralBalance * writeOffIncentiveBps / 10000;
             uint fee = thisCollateralBalance - reward;
-            thisCollateral.seize(borrower, fee, feeDestination);
-            thisCollateral.seize(borrower, reward, msg.sender);
+            if(fee > 0) thisCollateral.seize(borrower, fee, feeDestination);
+            if(reward > 0) thisCollateral.seize(borrower, reward, msg.sender);
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];
