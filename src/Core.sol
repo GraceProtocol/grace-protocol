@@ -119,7 +119,11 @@ contract Core {
     }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
-    function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner { dailyBorrowLimitUsd = _dailyBorrowLimitUsd; }
+    function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner {
+        updateDailyBorrowLimit();
+        dailyBorrowLimitUsd = _dailyBorrowLimitUsd;
+        if(lastDailyBorrowLimitRemainingUsd > _dailyBorrowLimitUsd) lastDailyBorrowLimitRemainingUsd = _dailyBorrowLimitUsd;
+    }
     function setWriteOffIncentiveBps(uint _writeOffIncentiveBps) public onlyOwner {
         require(_writeOffIncentiveBps <= 10000, "writeOffIncentiveTooHigh");
         writeOffIncentiveBps = _writeOffIncentiveBps;
