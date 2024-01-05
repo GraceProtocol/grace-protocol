@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -38,8 +38,6 @@ interface ICollateral {
 interface IBond {
     function asset() external view returns (address);
     function deposit(uint amount, address recipient) external;
-    function preorder(uint amount, address recipient) external;
-    function cancelPreorder(uint amount, address recipient, address owner) external;
     function withdraw(uint amount) external;
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
@@ -257,46 +255,6 @@ contract Helper {
             payable(msg.sender).transfer(wethBal);
         }
     }
-
-    function depositAndPreorder(address pool, address bond, uint assets) external onlySameAsset(pool, bond){
-        IERC20 asset = IERC20(IPool(pool).asset());
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-        asset.forceApprove(pool, assets);
-        uint shares = IPool(pool).deposit(assets, address(this));
-        IERC20(pool).approve(bond, shares);
-        IBond(bond).preorder(shares, msg.sender);
-    }
-
-    function depositAndPreorderEth(address pool, address bond) external payable onlyWethPools(pool) onlySameAsset(pool, bond){
-        weth.deposit{value: msg.value}();
-        weth.approve(pool, msg.value);
-        uint shares = IPool(pool).deposit(msg.value, address(this));
-        IERC20(pool).approve(bond, shares);
-        IBond(bond).preorder(shares, msg.sender);
-    }
-
-    function mintAndPreorder(address pool, address bond, uint shares) external onlySameAsset(pool, bond){
-        IERC20 asset = IERC20(IPool(pool).asset());
-        uint assets = IPool(pool).previewMint(shares);
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-        asset.forceApprove(pool, assets);
-        IPool(pool).mint(shares, address(this));
-        IERC20(pool).approve(bond, shares);
-        IBond(bond).preorder(shares, msg.sender);
-    }
-
-    function mintAndPreorderEth(address pool, address bond, uint shares) external payable onlyWethPools(pool) onlySameAsset(pool, bond){
-        weth.deposit{value: msg.value}();
-        weth.approve(pool, msg.value);
-        IPool(pool).mint(shares, address(this));
-        IERC20(pool).approve(bond, shares);
-        IBond(bond).preorder(shares, msg.sender);
-        uint wethBal = weth.balanceOf(address(this));
-        if (wethBal > 0) {
-            weth.withdraw(wethBal);
-            payable(msg.sender).transfer(wethBal);
-        }
-    }
     
     function unbondAndWithdraw(address bond, uint assets) external {
         IPool pool = IPool(IBond(bond).asset());
@@ -328,33 +286,6 @@ contract Helper {
         pool.withdraw(assets, msg.sender, address(this));
     }
 
-    function cancelPreorderAndWithdraw(address bond, uint assets) external {
-        IPool pool = IPool(IBond(bond).asset());
-        uint shares = pool.previewWithdraw(assets);
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
-        pool.withdraw(assets, msg.sender, address(this));
-    }
-
-    function cancelPreorderAndWithdrawEth(address bond, uint assets) external onlyWethPools(IBond(bond).asset()) {
-        IPool pool = IPool(IBond(bond).asset());
-        uint shares = pool.previewWithdraw(assets);
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
-        pool.withdraw(assets, address(this), address(this));
-        uint wethBal = weth.balanceOf(address(this));
-        if (wethBal > 0) {
-            weth.withdraw(wethBal);
-            payable(msg.sender).transfer(wethBal);
-        }
-    }
-
-    function cancelPreorderAndWithdrawWithPermit(address bond, uint assets, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
-        IPool pool = IPool(IBond(bond).asset());
-        uint shares = pool.previewWithdraw(assets);
-        IBond(bond).permit(msg.sender, address(this), shares, deadline, v, r, s);
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
-        pool.withdraw(assets, msg.sender, address(this));
-    }
-
     function unbondAndRedeem(address bond, uint shares) external {
         IERC20(bond).transferFrom(msg.sender, address(this), shares);
         IBond(bond).withdraw(shares);
@@ -378,30 +309,6 @@ contract Helper {
         IBond(bond).permit(msg.sender, address(this), shares, deadline, v, r, s);
         IERC20(bond).transferFrom(msg.sender, address(this), shares);
         IBond(bond).withdraw(shares);
-        IPool pool = IPool(IBond(bond).asset());
-        pool.redeem(shares, msg.sender, address(this));
-    }
-
-    function cancelPreorderAndRedeem(address bond, uint shares) external {
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
-        IPool pool = IPool(IBond(bond).asset());
-        pool.redeem(shares, msg.sender, address(this));
-    }
-
-    function cancelPreorderAndRedeemEth(address bond, uint shares) external onlyWethPools(IBond(bond).asset()) {
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
-        IPool pool = IPool(IBond(bond).asset());
-        pool.redeem(shares, address(this), address(this));
-        uint wethBal = weth.balanceOf(address(this));
-        if (wethBal > 0) {
-            weth.withdraw(wethBal);
-            payable(msg.sender).transfer(wethBal);
-        }
-    }
-
-    function cancelPreorderAndRedeemWithPermit(address bond, uint shares, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
-        IBond(bond).permit(msg.sender, address(this), shares, deadline, v, r, s);
-        IBond(bond).cancelPreorder(shares, address(this), msg.sender);
         IPool pool = IPool(IBond(bond).asset());
         pool.redeem(shares, msg.sender, address(this));
     }

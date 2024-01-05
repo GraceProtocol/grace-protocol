@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -119,7 +119,7 @@ contract RecurringBond {
         return block.timestamp < auctionEnd;
     }
 
-    function deposit(uint amount, address recipient) external {
+    function deposit(uint amount, address recipient) public {
         updateIndex(recipient);
         if(isAuctionActive()) {
             balances[recipient] = balanceOf(recipient) + amount;
@@ -135,7 +135,11 @@ contract RecurringBond {
         asset.safeTransferFrom(msg.sender, address(this), amount);
     }
 
-    function withdraw(uint amount, address recipient, address owner) external {
+    function deposit(uint amount) external {
+        deposit(amount, msg.sender);
+    }
+
+    function withdraw(uint amount, address recipient, address owner) public {
         updateIndex(owner);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -154,6 +158,10 @@ contract RecurringBond {
         }
         deposits -= amount;
         asset.safeTransfer(recipient, amount);
+    }
+
+    function withdraw(uint amount) external {
+        withdraw(amount, msg.sender, msg.sender);
     }
 
     function totalPreorders() external view returns (uint) {

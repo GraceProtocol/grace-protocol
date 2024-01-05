@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "forge-std/Test.sol";
 import "../src/Oracle.sol";
@@ -16,19 +16,19 @@ contract OracleTest is Test, Oracle {
     }
 
     function test_constructor() public {
-        assertEq(oracle.core(), address(this));
+        assertEq(oracle.owner(), address(this));
     }
 
     function test_setPoolFixedPrice() public {
         // success case
         oracle.setPoolFixedPrice(address(2), 1e18);
         assertEq(oracle.poolFixedPrices(address(2)), 1e18);
-        assertEq(oracle.viewDebtPriceMantissa(address(2)), 1e18);
+        assertEq(oracle.viewDebtPriceMantissa(address(this), address(2)), 1e18);
         assertEq(oracle.getDebtPriceMantissa(address(2)), 1e18);
 
-        // only core
+        // only owner
         vm.startPrank(UNAUTHORIZED);
-        vm.expectRevert("onlyCore");
+        vm.expectRevert("onlyOwner");
         oracle.setPoolFixedPrice(address(2), 1e18);
     }
  
@@ -37,9 +37,9 @@ contract OracleTest is Test, Oracle {
         oracle.setCollateralFeed(address(2), address(3));
         assertEq(oracle.collateralFeeds(address(2)), address(3));
 
-        // only core
+        // only owner
         vm.startPrank(UNAUTHORIZED);
-        vm.expectRevert("onlyCore");
+        vm.expectRevert("onlyOwner");
         oracle.setCollateralFeed(address(2), address(3));
     }
 
@@ -48,9 +48,9 @@ contract OracleTest is Test, Oracle {
         oracle.setPoolFeed(address(2), address(3));
         assertEq(oracle.poolFeeds(address(2)), address(3));
 
-        // only core
+        // only owner
         vm.startPrank(UNAUTHORIZED);
-        vm.expectRevert("onlyCore");
+        vm.expectRevert("onlyOwner");
         oracle.setPoolFeed(address(2), address(3));
     }
 
@@ -100,62 +100,62 @@ contract OracleTest is Test, Oracle {
 
     function test_getCollateralPriceMantissa() public {
         ERC20 token = new ERC20();
-        collateralFeeds[address(token)] = address(new FixedPriceFeed(18, 1e18));
-        vm.warp(block.timestamp + WEEK);
+        oracle.setCollateralFeed(address(token), address(new FixedPriceFeed(18, 1e18)));
+        uint WEEK = 7 days;
+        skip(WEEK);
         uint CF = 5000;
         uint cap = 1e18;
         uint totalCollateral = 1e18;
-        vm.startPrank(address(msg.sender)); // core
         // first record
-        assertEq(Oracle(address(this)).getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 1e18);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK], 1e18);
-        assertEq(Oracle(address(this)).viewCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 1e18);
+        assertEq(oracle.getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 1e18);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK), 1e18);
+        assertEq(oracle.viewCollateralPriceMantissa(address(this), address(token), CF, totalCollateral, cap), 1e18);
         // second record, triple price, triple cap. Triggers PPO
         cap *= 3;
-        collateralFeeds[address(token)] = address(new FixedPriceFeed(18, 3 * 1e18));
-        assertEq(Oracle(address(this)).getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK], 1e18);
-        assertEq(Oracle(address(this)).viewCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
+        oracle.setCollateralFeed(address(token), address(new FixedPriceFeed(18, 3*1e18)));
+        assertEq(oracle.getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK), 1e18);
+        assertEq(oracle.viewCollateralPriceMantissa(address(this), address(token), CF, totalCollateral, cap), 2e18);
         // week 2, PPO still active
-        vm.warp(block.timestamp + WEEK);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK], 0);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK - 1], 1e18);
-        assertEq(Oracle(address(this)).getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
-        assertEq(Oracle(address(this)).viewCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
+        skip(WEEK);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK), 0);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK - 1), 1e18);
+        assertEq(oracle.getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 2e18);
+        assertEq(oracle.viewCollateralPriceMantissa(address(this), address(token), CF, totalCollateral, cap), 2e18);
         // week 3, PPO inactive
-        vm.warp(block.timestamp + WEEK);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK], 0);
-        assertEq(weeklyLows[address(token)][block.timestamp / WEEK - 1], 3e18);
-        assertEq(Oracle(address(this)).getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 3e18);
-        assertEq(Oracle(address(this)).viewCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 3e18);
+        skip(WEEK);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK), 0);
+        assertEq(oracle.weeklyLows(address(this), address(token), block.timestamp / WEEK - 1), 3e18);
+        assertEq(oracle.getCollateralPriceMantissa(address(token), CF, totalCollateral, cap), 3e18);
+        assertEq(oracle.viewCollateralPriceMantissa(address(this), address(token), CF, totalCollateral, cap), 3e18);
     }
 
     function test_getDebtPriceMantissa() public {
         ERC20 token = new ERC20();
-        poolFeeds[address(token)] = address(new FixedPriceFeed(18, 1e18));
-        vm.warp(block.timestamp + WEEK);
-        vm.startPrank(address(msg.sender)); // core
+        oracle.setPoolFeed(address(token), address(new FixedPriceFeed(18, 1e18)));
+        uint WEEK = 7 days;
+        skip(WEEK);
         // first record
-        assertEq(Oracle(address(this)).getDebtPriceMantissa(address(token)), 1e18);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK], 1e18);
-        assertEq(Oracle(address(this)).viewDebtPriceMantissa(address(token)), 1e18);
+        assertEq(oracle.getDebtPriceMantissa(address(token)), 1e18);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK), 1e18);
+        assertEq(oracle.viewDebtPriceMantissa(address(this), address(token)), 1e18);
         // second record, reduce price by 90%
-        poolFeeds[address(token)] = address(new FixedPriceFeed(18, 1e17));
-        assertEq(Oracle(address(this)).getDebtPriceMantissa(address(token)), 1e18);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK], 1e18);
-        assertEq(Oracle(address(this)).viewDebtPriceMantissa(address(token)), 1e18);
+        oracle.setPoolFeed(address(token), address(new FixedPriceFeed(18, 1e17)));
+        assertEq(oracle.getDebtPriceMantissa(address(token)), 1e18);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK), 1e18);
+        assertEq(oracle.viewDebtPriceMantissa(address(this), address(token)), 1e18);
         // week 2, PPO still active
-        vm.warp(block.timestamp + WEEK);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK], 0);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK - 1], 1e18);
-        assertEq(Oracle(address(this)).getDebtPriceMantissa(address(token)), 1e18);
-        assertEq(Oracle(address(this)).viewDebtPriceMantissa(address(token)), 1e18);
+        skip(WEEK);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK), 0);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK - 1), 1e18);
+        assertEq(oracle.getDebtPriceMantissa(address(token)), 1e18);
+        assertEq(oracle.viewDebtPriceMantissa(address(this), address(token)), 1e18);
         // week 3, PPO inactive
-        vm.warp(block.timestamp + WEEK);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK], 0);
-        assertEq(weeklyHighs[address(token)][block.timestamp / WEEK - 1], 1e17);
-        assertEq(Oracle(address(this)).getDebtPriceMantissa(address(token)), 1e17);
-        assertEq(Oracle(address(this)).viewDebtPriceMantissa(address(token)), 1e17);
+        skip(WEEK);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK), 0);
+        assertEq(oracle.weeklyHighs(address(this), address(token), block.timestamp / WEEK - 1), 1e17);
+        assertEq(oracle.getDebtPriceMantissa(address(token)), 1e17);
+        assertEq(oracle.viewDebtPriceMantissa(address(this), address(token)), 1e17);
     }
 
 }

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 contract ERC20 {
 
+    string public name = "ERC20";
+    string public symbol = "ERC20";
     uint8 public decimals = 18;
 
     uint256 public totalSupply;

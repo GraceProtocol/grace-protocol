@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 contract Grace {
     /// @notice EIP-20 token name for this token

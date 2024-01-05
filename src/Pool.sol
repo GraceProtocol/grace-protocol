@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -186,6 +186,10 @@ contract Pool {
         updateBorrowRate(_lastAccrued);
     }
 
+    function deposit(uint256 assets) public returns (uint256 shares) {
+        return deposit(assets, msg.sender);
+    }
+
     function transfer(address recipient, uint256 shares) public returns (bool) {
         balanceOf[msg.sender] -= shares;
         balanceOf[recipient] += shares;
@@ -237,6 +241,10 @@ contract Pool {
         updateBorrowRate(_lastAccrued);
     }
 
+    function mint(uint256 shares) public returns (uint256 assets) {
+        return mint(shares, msg.sender);
+    }
+
     function previewWithdraw(uint256 assets) public view returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
@@ -264,6 +272,10 @@ contract Pool {
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateBorrowRate(_lastAccrued);
+    }
+
+    function withdraw(uint256 assets) public returns (uint256 shares) {
+        return withdraw(assets, msg.sender, msg.sender);
     }
 
     function convertToAssets(uint256 shares) public view returns (uint256) {
@@ -294,6 +306,10 @@ contract Pool {
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateBorrowRate(_lastAccrued);
+    }
+
+    function redeem(uint256 shares) public returns (uint256 assets) {
+        return redeem(shares, msg.sender, msg.sender);
     }
 
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
@@ -351,6 +367,10 @@ contract Pool {
         updateBorrowRate(_lastAccrued);
     }
 
+    function borrow(uint256 amount) public {
+        borrow(amount, msg.sender, msg.sender);
+    }
+
     function previewRepay(uint256 assets) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
@@ -369,6 +389,10 @@ contract Pool {
         asset.safeTransferFrom(msg.sender, address(this), amount);
         lastBalance = asset.balanceOf(address(this));
         updateBorrowRate(_lastAccrued);
+    }
+
+    function repay(uint amount) public {
+        repay(msg.sender, amount);
     }
 
     function writeOff(address account) public lock {

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./EMA.sol";
-import "./Oracle.sol";
 
 interface IPoolDeployer {
     function deployPool(string memory name, string memory symbol, address underlying) external returns (address pool);
@@ -13,8 +12,20 @@ interface ICollateralDeployer {
     function deployCollateral(string memory name, string memory symbol, address underlying) external returns (address collateral);
 }
 
-interface IRateModel {
-    function getRateBps(uint util, uint lastRate, uint lastAccrued) external view returns (uint256);
+interface IBorrowController {
+    function onBorrow(address pool, address borrower, uint amount, uint price) external;
+    function onRepay(address pool, address borrower, uint amount, uint price) external;
+}
+
+interface IOracle {
+    function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external returns (uint256);
+    function getDebtPriceMantissa(address token) external returns (uint256);
+    function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256);
+}
+
+interface IRateProvider {
+    function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
+    function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
 }
 
 interface IPool {
@@ -41,12 +52,9 @@ contract Core {
 
     struct CollateralConfig {
         bool enabled;
-        IRateModel feeModel;
         uint collateralFactorBps;
         uint hardCap;
         uint softCapBps;
-        bool depositPaused;
-        bool depositSuspended;
         // cap variables
         uint lastSoftCapUpdate;
         uint prevSoftCap;
@@ -59,16 +67,12 @@ contract Core {
 
     struct PoolConfig {
         bool enabled;
-        IRateModel interestRateModel;
         uint depositCap;
-        bool borrowPaused;
-        bool borrowSuspended;
         EMA.EMAState supplyEMA;
     }
 
-    IPoolDeployer public immutable poolDeployer;
-    ICollateralDeployer public immutable collateralDeployer;
-    uint public constant MAX_SOFT_CAP = 2000;
+    IPoolDeployer public poolDeployer;
+    ICollateralDeployer public collateralDeployer;
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
@@ -76,17 +80,14 @@ contract Core {
     uint public supplyEMASum;
     uint256 public lockDepth;
     address public owner;
-    Oracle public immutable oracle = new Oracle();
-    IRateModel public defaultInterestRateModel;
-    IRateModel public defaultCollateralFeeModel;
+    IOracle public oracle;
+    IBorrowController public borrowController;
+    IRateProvider public rateProvider;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
-    uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
-    uint constant MAX_COLLATERAL_FACTOR_BPS = 1000000; // 10,000%
     uint public dailyBorrowLimitUsd = 100000e18; // $100,000
     uint public dailyBorrowLimitLastUpdate;
     uint public lastDailyBorrowLimitRemainingUsd = 100000e18; // $100,000
-    address public guardian;
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
     mapping (address => IPool) public underlyingToPool;
@@ -98,8 +99,11 @@ contract Core {
     IPool[] public poolList;
     ICollateral[] public collateralList;
 
-    constructor(address _owner, address _poolDeployer, address _collateralDeployer) {
-        owner = _owner;
+    constructor(address _rateProvider, address _borrowController, address _oracle, address _poolDeployer, address _collateralDeployer) {
+        owner = msg.sender;
+        rateProvider = IRateProvider(_rateProvider);
+        borrowController = IBorrowController(_borrowController);
+        oracle = IOracle(_oracle);
         poolDeployer = IPoolDeployer(_poolDeployer);
         collateralDeployer = ICollateralDeployer(_collateralDeployer);
     }
@@ -110,42 +114,21 @@ contract Core {
     }
 
     function setOwner(address _owner) public onlyOwner { owner = _owner; }
+    function setOracle(address _oracle) public onlyOwner { oracle = IOracle(_oracle); }
+    function setBorrowController(address _borrowController) public onlyOwner { borrowController = IBorrowController(_borrowController); }
+    function setRateProvider(address _rateProvider) public onlyOwner { rateProvider = IRateProvider(_rateProvider); }
+    function setPoolDeployer(address _poolDeployer) public onlyOwner { poolDeployer = IPoolDeployer(_poolDeployer); }
+    function setCollateralDeployer(address _collateralDeployer) public onlyOwner { collateralDeployer = ICollateralDeployer(_collateralDeployer); }
     function setFeeDestination(address _feeDestination) public onlyOwner { feeDestination = _feeDestination; }
-    function setDefaultInterestRateModel(IRateModel _model) public onlyOwner { defaultInterestRateModel = _model; }
-    function setDefaultCollateralFeeModel(IRateModel _model) public onlyOwner { defaultCollateralFeeModel = _model; }
     function setLiquidationIncentiveBps(uint _liquidationIncentiveBps) public onlyOwner {
         require(_liquidationIncentiveBps <= 10000, "liquidationIncentiveTooHigh");
         liquidationIncentiveBps = _liquidationIncentiveBps;
     }
     function setMaxLiquidationIncentiveUsd(uint _maxLiquidationIncentiveUsd) public onlyOwner { maxLiquidationIncentiveUsd = _maxLiquidationIncentiveUsd; }
     function setBadDebtCollateralThresholdUsd(uint _badDebtCollateralThresholdUsd) public onlyOwner { badDebtCollateralThresholdUsd = _badDebtCollateralThresholdUsd; }
-    function setDailyBorrowLimitUsd(uint _dailyBorrowLimitUsd) public onlyOwner {
-        updateDailyBorrowLimit();
-        dailyBorrowLimitUsd = _dailyBorrowLimitUsd;
-        if(lastDailyBorrowLimitRemainingUsd > _dailyBorrowLimitUsd) lastDailyBorrowLimitRemainingUsd = _dailyBorrowLimitUsd;
-    }
     function setWriteOffIncentiveBps(uint _writeOffIncentiveBps) public onlyOwner {
         require(_writeOffIncentiveBps <= 10000, "writeOffIncentiveTooHigh");
         writeOffIncentiveBps = _writeOffIncentiveBps;
-    }
-    function setGuardian(address _guardian) public onlyOwner { guardian = _guardian; }
-    function setPoolBorrowPaused(IPool pool, bool paused) public {
-        require(msg.sender == guardian || msg.sender == owner, "onlyGuardianOrOwner");
-        require(poolsData[pool].borrowSuspended == false, "borrowSuspended");
-        poolsData[pool].borrowPaused = paused;
-    }
-    function setPoolBorrowSuspended(IPool pool, bool suspended) public onlyOwner { 
-        poolsData[pool].borrowSuspended = suspended;
-        if(suspended) poolsData[pool].borrowPaused = true;
-    }
-    function setCollateralDepositPaused(ICollateral collateral, bool paused) public {
-        require(msg.sender == guardian || msg.sender == owner, "onlyGuardianOrOwner");
-        require(collateralsData[collateral].depositSuspended == false, "depositSuspended");
-        collateralsData[collateral].depositPaused = paused;
-    }
-    function setCollateralDepositSuspended(ICollateral collateral, bool suspended) public onlyOwner { 
-        collateralsData[collateral].depositSuspended = suspended;
-        if(suspended) collateralsData[collateral].depositPaused = true;
     }
 
     function globalLock(address caller) external {
@@ -168,22 +151,10 @@ contract Core {
         lockDepth -= 1;
     }
 
-    function updateDailyBorrowLimit() internal {
-        uint timeElapsed = block.timestamp - dailyBorrowLimitLastUpdate;
-        if(timeElapsed == 0) return;
-        uint addedCapacity = timeElapsed * dailyBorrowLimitUsd / 1 days;
-        uint newLimit = lastDailyBorrowLimitRemainingUsd + addedCapacity;
-        if(newLimit > dailyBorrowLimitUsd) newLimit = dailyBorrowLimitUsd;
-        lastDailyBorrowLimitRemainingUsd = newLimit;
-        dailyBorrowLimitLastUpdate = block.timestamp;
-    }
-
     function deployPool(
         string memory name,
         string memory symbol,
         address underlying,
-        address feed,
-        address interestRateModel,
         uint depositCap
     ) public onlyOwner returns (address) {
         require(underlyingToPool[underlying] == IPool(address(0)), "underlyingAlreadyAdded");
@@ -195,31 +166,12 @@ contract Core {
         emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({
             enabled: true,
-            interestRateModel: IRateModel(interestRateModel),
             depositCap: depositCap,
-            borrowPaused: false,
-            borrowSuspended: false,
             supplyEMA: emaState
         });
-        oracle.setPoolFeed(underlying, feed);
         poolList.push(pool);
         underlyingToPool[underlying] = pool;
         return address(pool);
-    }
-
-    function deployPool(
-        string memory name,
-        string memory symbol,
-        address underlying,
-        address feed,
-        uint depositCap
-    ) external returns (address) {
-        return deployPool(name, symbol, underlying, feed, address(defaultInterestRateModel), depositCap);
-    }
-
-    function setPoolFeed(IPool pool, address feed) public onlyOwner {
-        require(poolsData[pool].enabled == true, "poolNotAdded");
-        oracle.setPoolFeed(address(pool), feed);
     }
 
     function setPoolDepositCap(IPool pool, uint depositCap) public onlyOwner {
@@ -227,24 +179,17 @@ contract Core {
         poolsData[pool].depositCap = depositCap;
     }
 
-    function setPoolInterestRateModel(IPool pool, address interestRateModel) external onlyOwner {
-        require(poolsData[pool].enabled == true, "poolNotAdded");
-        poolsData[pool].interestRateModel = IRateModel(interestRateModel);
-    }
-
     function deployCollateral(
         string memory name,
         string memory symbol,
         address underlying,
-        address feed,
-        address feeModel,
         uint collateralFactor,
         uint hardCapUsd,
         uint softCapBps
     ) public onlyOwner returns (address) {
         require(underlyingToCollateral[underlying] == ICollateral(address(0)), "underlyingAlreadyAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
-        require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
+        require(softCapBps <= 10000, "softCapTooHigh");
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
@@ -252,11 +197,8 @@ contract Core {
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
-            feeModel: IRateModel(feeModel),
             hardCap: hardCapUsd,
             softCapBps: softCapBps,
-            depositPaused: false,
-            depositSuspended: false,
             lastSoftCapUpdate: block.timestamp,
             prevSoftCap: 0,
             lastHardCapUpdate: block.timestamp,
@@ -264,32 +206,9 @@ contract Core {
             lastCollateralFactorUpdate: block.timestamp,
             prevCollateralFactor: 0
         });
-        oracle.setCollateralFeed(underlying, feed);
         collateralList.push(collateral);
         underlyingToCollateral[underlying] = collateral;
         return address(collateral);
-    }
-
-    function deployCollateral(
-        string memory name,
-        string memory symbol,
-        address underlying,
-        address feed,
-        uint collateralFactor,
-        uint hardCapUsd,
-        uint softCapBps
-    ) external returns (address) {
-        return deployCollateral(name, symbol, underlying, feed, address(defaultCollateralFeeModel), collateralFactor, hardCapUsd, softCapBps);
-    }
-
-    function setCollateralFeed(ICollateral collateral, address feed) public onlyOwner {
-        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        oracle.setCollateralFeed(address(collateral.asset()), feed);
-    }
-
-    function setCollateralFeeModel(ICollateral collateral, address feeModel) external onlyOwner {
-        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        collateralsData[collateral].feeModel = IRateModel(feeModel);
     }
 
     function setCollateralFactor(ICollateral collateral, uint collateralFactor) public onlyOwner {
@@ -309,7 +228,7 @@ contract Core {
 
     function setCollateralSoftCap(ICollateral collateral, uint softCapBps) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        require(softCapBps <= MAX_SOFT_CAP, "softCapTooHigh");
+        require(softCapBps <= 10000, "softCapTooHigh");
         collateralsData[collateral].prevSoftCap = getSoftCapUsd(collateral);
         collateralsData[collateral].softCapBps = softCapBps;
         collateralsData[collateral].lastSoftCapUpdate = block.timestamp;
@@ -357,78 +276,9 @@ contract Core {
         return hardCap < softCap ? hardCap : softCap;
     }
 
-    function maxCollateralDeposit(ICollateral collateral) external view returns (uint) {
-        if(collateralsData[collateral].enabled == false) return 0;
-        if(collateralsData[collateral].depositPaused == true) return 0;
-        uint capUsd = getCapUsd(collateral);
-        uint totalAssets = collateral.totalAssets();
-        // get oracle price
-        uint price = oracle.viewCollateralPriceMantissa(
-            address(collateral),
-            getCollateralFactor(collateral),
-            totalAssets,
-            capUsd
-        );
-        uint totalValue = totalAssets * price / MANTISSA;
-        if(totalValue >= capUsd) return 0;
-        uint remainingValue = capUsd - totalValue;
-        uint remainingDeposits = remainingValue * MANTISSA / price;
-        return remainingDeposits;
-    }
-
-    function maxCollateralWithdraw(ICollateral collateral, address account) external view returns (uint) {
-        if(collateralsData[collateral].enabled == false) return 0;
-        if(collateralsData[collateral].depositPaused == true) return 0;
-        
-        uint bal = collateral.getCollateralOf(account);
-        
-        // calculate liabilities
-        uint liabilitiesUsd = 0;
-        for (uint i = 0; i < borrowerPools[account].length; i++) {
-            IPool pool = borrowerPools[account][i];
-            uint debt = pool.getDebtOf(account);
-            uint price = oracle.viewDebtPriceMantissa(address(pool));
-            uint debtUsd = debt * price / MANTISSA;
-            liabilitiesUsd += debtUsd;
-        }
-
-        if(liabilitiesUsd == 0) return bal;
-
-        // calculate assets
-        uint assetsUsd = 0;
-        for (uint i = 0; i < userCollaterals[account].length; i++) {
-            ICollateral thisCollateral = userCollaterals[account][i];
-            uint capUsd = getCapUsd(thisCollateral);
-            uint price = oracle.viewCollateralPriceMantissa(
-                address(thisCollateral),
-                getCollateralFactor(thisCollateral),
-                thisCollateral.totalAssets(),
-                capUsd
-            );
-            uint thisCollateralBalance = collateral.getCollateralOf(account);
-            uint thisCollateralUsd = thisCollateralBalance * getCollateralFactor(thisCollateral) * price / 10000 / MANTISSA;
-            assetsUsd += thisCollateralUsd;
-        }
-
-        if(assetsUsd <= liabilitiesUsd) return 0;
-        uint deltaUsd = assetsUsd - liabilitiesUsd;
-        uint collateralFactorBps = getCollateralFactor(collateral);
-        uint _capUsd = getCapUsd(collateral);
-        uint _price = oracle.viewCollateralPriceMantissa(
-            address(collateral),
-            collateralFactorBps,
-            collateral.totalAssets(),
-            _capUsd
-        );
-        uint deltaCollateral = deltaUsd * MANTISSA * 10000 / _price / collateralFactorBps;
-        uint maxCollateral = bal > deltaCollateral ? deltaCollateral : bal;
-        return maxCollateral;
-    }
-
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool) {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
-        require(collateralsData[collateral].depositPaused == false, "depositPaused");
         uint capUsd = getCapUsd(collateral);
         // get oracle price
         uint price = oracle.getCollateralPriceMantissa(
@@ -513,6 +363,7 @@ contract Core {
     function getCollateralFeeBps(address collateral, uint lastFee, uint lastAccrued) external view returns (uint256) {
         uint capUsd = getCapUsd(ICollateral(collateral));
         uint price = oracle.viewCollateralPriceMantissa(
+            address(this),
             collateral,
             getCollateralFactor(ICollateral(collateral)),
             ICollateral(collateral).totalAssets(),
@@ -521,22 +372,11 @@ contract Core {
         uint depositedUsd = ICollateral(collateral).totalAssets() * price / MANTISSA;
         uint util = capUsd > 0 ? depositedUsd * 10000 / capUsd : 10000;
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getCollateralFeeModelFeeBps{gas:passedGas}(collateral, util, lastFee, lastAccrued) returns (uint256 _feeBps) {
-            if(_feeBps > MAX_COLLATERAL_FACTOR_BPS) _feeBps = MAX_COLLATERAL_FACTOR_BPS;
+        try rateProvider.getCollateralFeeModelFeeBps{gas:passedGas}(collateral, util, lastFee, lastAccrued) returns (uint256 _feeBps) {
             return _feeBps;
         } catch {
             return 0;
         }
-    }
-
-    function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        IRateModel interestRateModel = poolsData[IPool(pool)].interestRateModel;
-        return interestRateModel.getRateBps(util, lastBorrowRate, lastAccrued);
-    }
-
-    function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
-        IRateModel collateralFeeModel = collateralsData[ICollateral(collateral)].feeModel;
-        return collateralFeeModel.getRateBps(util, lastBorrowRate, lastAccrued);
     }
 
     function onPoolDeposit(uint256 amount) external returns (bool) {
@@ -570,7 +410,6 @@ contract Core {
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
-        require(poolsData[pool].borrowPaused == false, "borrowPaused");
         // if first borrow, add to borrowerPools and poolBorrowers
         if(poolBorrowers[pool][caller] == false) {
             poolBorrowers[pool][caller] = true;
@@ -603,9 +442,9 @@ contract Core {
             uint price = oracle.getDebtPriceMantissa(address(thisPool));
             uint debtUsd = debt * price / MANTISSA;
             if(thisPool == pool) {
-                updateDailyBorrowLimit();
-                uint extraDebtUsd = amount * price / MANTISSA;
-                lastDailyBorrowLimitRemainingUsd -= extraDebtUsd;
+                if(borrowController != IBorrowController(address(0))) {
+                    borrowController.onBorrow(msg.sender, caller, amount, price);
+                }
             }
             liabilitiesUsd += debtUsd;
         }
@@ -634,23 +473,15 @@ contract Core {
             poolBorrowers[pool][recipient] = false;
         }
 
-        // reduce daily borrows
-        updateDailyBorrowLimit();
-        uint price = oracle.getDebtPriceMantissa(address(pool));
-        uint repaidDebtUsd = amount * price / MANTISSA;
-        if(lastDailyBorrowLimitRemainingUsd + repaidDebtUsd > dailyBorrowLimitUsd) {
-            lastDailyBorrowLimitRemainingUsd = dailyBorrowLimitUsd;
-        } else {
-            lastDailyBorrowLimitRemainingUsd += repaidDebtUsd;
+        if(borrowController != IBorrowController(address(0))) {
+            borrowController.onRepay(msg.sender, recipient, amount, oracle.getDebtPriceMantissa(msg.sender));
         }
-
         return true;
     }
 
     function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {        
         uint passedGas = gasleft() > 1000000 ? 1000000 : gasleft(); // protect against out of gas reverts
-        try Core(this).getInterestRateModelBorrowRate{gas: passedGas}(pool, util, lastBorrowRate, lastAccrued) returns (uint256 _borrowRateBps) {
-            if(_borrowRateBps > MAX_BORROW_RATE_BPS) _borrowRateBps = MAX_BORROW_RATE_BPS;
+        try rateProvider.getInterestRateModelBorrowRate{gas: passedGas}(pool, util, lastBorrowRate, lastAccrued) returns (uint256 _borrowRateBps) {
             return _borrowRateBps;
         } catch {
             return 0;

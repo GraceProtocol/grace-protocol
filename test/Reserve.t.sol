@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "forge-std/Test.sol";
 import "../src/Reserve.sol";
@@ -12,7 +12,7 @@ contract ReserveTest is Test {
 
     function setUp() public {
         grace = new ERC20();
-        reserve = new Reserve(address(grace), address(this));
+        reserve = new Reserve(address(grace));
     }
 
     function test_constructor() public {

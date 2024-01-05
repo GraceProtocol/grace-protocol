@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "forge-std/Test.sol";
 import "../src/BondFactory.sol";
@@ -13,7 +13,7 @@ contract BondFactoryTest is Test {
 
     function setUp() public {
         GRACE = new ERC20();
-        bondFactory = new BondFactory(address(GRACE), address(this));
+        bondFactory = new BondFactory(address(GRACE));
     }
 
     function test_constructor() public {

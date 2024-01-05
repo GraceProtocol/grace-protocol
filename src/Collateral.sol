@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -11,8 +11,6 @@ interface ICollateralCore {
     function feeDestination() external view returns (address);
     function globalLock(address caller) external;
     function globalUnlock() external;
-    function maxCollateralWithdraw(address collateral, address account) external view returns (uint);
-    function maxCollateralDeposit(address collateral) external view returns (uint);
 }
 
 contract Collateral {
@@ -171,6 +169,11 @@ contract Collateral {
         updateFee(_lastAccrued);
     }
 
+    function deposit(uint256 assets) public returns (uint256 shares) {
+        return deposit(assets, msg.sender);
+    }
+
+
     function previewMint(uint256 shares) public view returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
@@ -180,8 +183,6 @@ contract Collateral {
     function maxWithdraw(address owner) public view returns (uint256 assets) {
         uint shares = getCollateralOf(owner);
         assets = convertToAssets(shares);
-        uint max = core.maxCollateralWithdraw(address(this), owner);
-        assets = assets > max ? max : assets;
         if(assets > lastBalance - MINIMUM_BALANCE) {
             assets = lastBalance - MINIMUM_BALANCE;
         }
@@ -193,7 +194,7 @@ contract Collateral {
     }
 
     function maxDeposit(address) public view returns (uint256 assets) {
-        return core.maxCollateralDeposit(address(this));
+        return type(uint).max;
     }
 
     function maxMint(address owner) public view returns (uint256 shares) {
@@ -213,6 +214,10 @@ contract Collateral {
         emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
         updateFee(_lastAccrued);
+    }
+
+    function mint(uint256 shares) public returns (uint256 assets) {
+        return mint(shares, msg.sender);
     }
 
     function withdraw(
@@ -238,6 +243,10 @@ contract Collateral {
         updateFee(_lastAccrued);
     }
 
+    function withdraw(uint256 assets) public returns (uint256 shares) {
+        return withdraw(assets, msg.sender, msg.sender);
+    }
+
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
         assets = previewRedeem(shares);
@@ -255,6 +264,10 @@ contract Collateral {
         emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
+    }
+
+    function redeem(uint256 shares) public returns (uint256 assets) {
+        return redeem(shares, msg.sender, msg.sender);
     }
 
     function transfer(address recipient, uint256 shares) public lock returns (bool) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -25,9 +25,9 @@ contract Reserve {
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
     PullRequest pullRequest;
 
-    constructor(address _grace, address _owner) {
+    constructor(address _grace) {
         grace = IGrace(_grace);
-        owner = _owner;
+        owner = msg.sender;
     }
 
     modifier onlyOwner {

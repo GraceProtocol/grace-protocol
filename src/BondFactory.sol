@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-pragma solidity 0.8.21;
+pragma solidity 0.8.22;
 
 import "./RecurringBond.sol";
 
@@ -14,9 +14,9 @@ contract BondFactory {
     mapping (address => bool) public isBond;
     address[] public allBonds;
 
-    constructor (address _grace, address _operator) {
+    constructor (address _grace) {
         GRACE = IGrace(_grace);
-        operator = _operator;
+        operator = msg.sender;
     }
 
     function allBondsLength() external view returns (uint) {
