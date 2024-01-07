@@ -20,8 +20,11 @@ contract Grace {
     /// @notice Whether the token can be transferred, or not.
     bool public transferable;
 
-    /// @notice Record of addresses excempt from transfer restrictions
-    mapping (address => bool) public transferWhitelist;
+    /// @notice Record of sources excempt from transfer restrictions
+    mapping (address => bool) public sourceWhitelist;
+
+    /// @notice Record of destinations excempt from transfer restrictions
+    mapping (address => bool) public destinationWhitelist;
 
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -101,13 +104,23 @@ contract Grace {
     }
 
     /**
-     * @notice Add or remove an address to/from the transfer whitelist
+     * @notice Add or remove an address to/from the source transfer whitelist
      * @param account The address to add
      * @param isWhitelisted Whether or not the address should be whitelisted
      */
-    function setTransferWhitelist(address account, bool isWhitelisted) external {
-        require(msg.sender == operator, "Grace::setTransferWhitelist: only the operator can set the transfer whitelist");
-        transferWhitelist[account] = isWhitelisted;
+    function setSourceWhitelist(address account, bool isWhitelisted) external {
+        require(msg.sender == operator, "Grace::setSourceWhitelist: only the operator can set the source whitelist");
+        sourceWhitelist[account] = isWhitelisted;
+    }
+
+    /**
+     * @notice Add or remove an address to/from the destination transfer whitelist
+     * @param account The address to add
+     * @param isWhitelisted Whether or not the address should be whitelisted
+     */
+    function setDestinationWhitelist(address account, bool isWhitelisted) external {
+        require(msg.sender == operator, "Grace::setDestinationWhitelist: only the operator can set the destination whitelist");
+        destinationWhitelist[account] = isWhitelisted;
     }
 
     /**
@@ -302,7 +315,7 @@ contract Grace {
         require(src != address(0), "Grace::_transferTokens: cannot transfer from the zero address");
         require(dst != address(0), "Grace::_transferTokens: cannot transfer to the zero address");
         if (!transferable) {
-            require(transferWhitelist[src], "Grace::transfer: transfers are disabled");
+            require(sourceWhitelist[src] || destinationWhitelist[dst], "Grace::transfer: transfers are disabled");
         }
         balances[src] = sub96(balances[src], amount, "Grace::_transferTokens: transfer amount exceeds balance");
         balances[dst] = add96(balances[dst], amount, "Grace::_transferTokens: transfer amount overflows");
