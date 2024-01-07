@@ -9,7 +9,7 @@ import {RateModel} from "src/RateModel.sol";
 import {Grace} from "src/GRACE.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
-import {BondFactory} from "src/BondFactory.sol";
+import {StakingFactory} from "src/StakingFactory.sol";
 import {Helper} from "src/Helper.sol";
 import {Oracle} from "src/Oracle.sol";
 import {RateProvider} from "src/RateProvider.sol";
@@ -74,18 +74,17 @@ contract SepoliaDeployerScript is Script {
         core.setFeeDestination(address(reserve));
 
         /*
-            Deploy BondFactory
+            Deploy StakingFactory
         */  
-        BondFactory bondFactory = new BondFactory(address(grace));
-        // Set Bond Factory as Grace minter
-        grace.setMinter(address(bondFactory), type(uint).max, type(uint).max);
+        StakingFactory stakingFactory = new StakingFactory(address(grace));
+        // Set stakingFactory as Grace minter
+        grace.setMinter(address(stakingFactory), type(uint).max, type(uint).max);
 
         /*
-            Deploy USDC pool (YEENUS) and bond
+            Deploy USDC pool (YEENUS) and staking pool
         */
         address Dai = address(new ERC20());
-        // Deploy Dai pool (mock) and bond
-        deployPool(core, bondFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
+        deployPool(core, stakingFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
 
         /*
             Deploy WETH collateral
@@ -99,11 +98,11 @@ contract SepoliaDeployerScript is Script {
 
     function deployPool(
         Core core,
-        BondFactory bondFactory, // if address(0), no bond will be created
+        StakingFactory stakingFactory, // if address(0), no staking pool will be created
         address asset,
         address feed,
         uint fixedPrice,
-        uint depositCap) public returns (address pool, address bond) {
+        uint depositCap) public returns (address pool, address stakingPool) {
         string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
         string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
         Oracle oracle = Oracle(address(core.oracle()));
@@ -113,20 +112,10 @@ contract SepoliaDeployerScript is Script {
             oracle.setPoolFixedPrice(asset, fixedPrice);
         }
         pool = core.deployPool(name, symbol, asset, depositCap);
-        if(address(bondFactory) != address(0)) {
-            string memory bondName = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " 1-hour bond"));
-            string memory bondSymbol = string(abi.encodePacked("gb", IERC20Metadata(asset).symbol(), "-1H"));
-            uint bondStart = block.timestamp + 600; // after 10 minutes to leave time for the bond to be created
-            uint bondDuration = 60 minutes;
-            uint auctionDuration = 10 minutes;
+        if(address(stakingFactory) != address(0)) {
             uint initialBudget = 1000 * 1e18;
-            bond = bondFactory.createBond(
+            stakingPool = stakingFactory.createPool(
                 pool,
-                bondName,
-                bondSymbol,
-                bondStart,
-                bondDuration,
-                auctionDuration,
                 initialBudget
             );
         }
