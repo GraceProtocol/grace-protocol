@@ -95,9 +95,13 @@ contract Core {
     mapping (ICollateral => mapping (address => bool)) public collateralUsers;
     mapping (IPool => mapping (address => bool)) public poolBorrowers;
     mapping (address => ICollateral[]) public userCollaterals;
+    mapping (address => uint) public userCollateralsCount;
     mapping (address => IPool[]) public borrowerPools;
+    mapping (address => uint) public borrowerPoolsCount;
     IPool[] public poolList;
+    uint public poolCount;
     ICollateral[] public collateralList;
+    uint public collateralCount;
 
     constructor(address _rateProvider, address _borrowController, address _oracle, address _poolDeployer, address _collateralDeployer) {
         owner = msg.sender;
@@ -170,6 +174,7 @@ contract Core {
             supplyEMA: emaState
         });
         poolList.push(pool);
+        poolCount++;
         underlyingToPool[underlying] = pool;
         return address(pool);
     }
@@ -207,6 +212,7 @@ contract Core {
             prevCollateralFactor: 0
         });
         collateralList.push(collateral);
+        collateralCount++;
         underlyingToCollateral[underlying] = collateral;
         return address(collateral);
     }
@@ -294,6 +300,7 @@ contract Core {
         if(collateralUsers[collateral][recipient] == false) {
             collateralUsers[collateral][recipient] = true;
             userCollaterals[recipient].push(collateral);
+            userCollateralsCount[recipient]++;
         }
         return true;
     }
@@ -342,6 +349,7 @@ contract Core {
                 if(userCollaterals[caller][i] == collateral) {
                     userCollaterals[caller][i] = userCollaterals[caller][userCollaterals[caller].length - 1];
                     userCollaterals[caller].pop();
+                    userCollateralsCount[caller]--;
                     break;
                 }
             }
@@ -356,6 +364,7 @@ contract Core {
         if(collateralUsers[collateral][recipient] == false) {
             collateralUsers[collateral][recipient] = true;
             userCollaterals[recipient].push(collateral);
+            userCollateralsCount[recipient]++;
         }
         return true;
     }
@@ -414,6 +423,7 @@ contract Core {
         if(poolBorrowers[pool][caller] == false) {
             poolBorrowers[pool][caller] = true;
             borrowerPools[caller].push(pool);
+            borrowerPoolsCount[caller]++;
         }
 
         // calculate assets
@@ -467,6 +477,7 @@ contract Core {
                 if(borrowerPools[recipient][i] == pool) {
                     borrowerPools[recipient][i] = borrowerPools[recipient][borrowerPools[recipient].length - 1];
                     borrowerPools[recipient].pop();
+                    borrowerPoolsCount[recipient]--;
                     break;
                 }
             }
@@ -574,6 +585,7 @@ contract Core {
                 if(userCollaterals[borrower][i] == collateral) {
                     userCollaterals[borrower][i] = userCollaterals[borrower][userCollaterals[borrower].length - 1];
                     userCollaterals[borrower].pop();
+                    userCollateralsCount[borrower]--;
                     break;
                 }
             }
@@ -623,6 +635,7 @@ contract Core {
             poolBorrowers[thisPool][borrower] = false;
         }
         delete borrowerPools[borrower];
+        borrowerPoolsCount[borrower] = 0;
 
         // seize
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
@@ -635,6 +648,7 @@ contract Core {
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];
+        userCollateralsCount[borrower] = 0;
     }
 
     function pullFromCore(IERC20 token, address dst, uint amount) public onlyOwner {
