@@ -10,7 +10,6 @@ import {GTR} from "src/GTR.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
-import {Helper} from "src/Helper.sol";
 import {Oracle} from "src/Oracle.sol";
 import {RateProvider} from "src/RateProvider.sol";
 import {BorrowController} from "src/BorrowController.sol";
@@ -42,7 +41,6 @@ contract SepoliaDeployerScript is Script {
         RateModel rateModel = new RateModel(9000, 3 days, 0, 2000, 10000);
         // WETH address used on Arbitrum Sepolia
         address weth = 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73;
-        new Helper(weth);
 
         /*
             Deploy Core
@@ -76,7 +74,7 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy VaultFactory
         */  
-        VaultFactory vaultFactory = new VaultFactory(address(gtr));
+        VaultFactory vaultFactory = new VaultFactory(address(gtr), weth);
         // Set vaultFactory as Grace minter
         gtr.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
 

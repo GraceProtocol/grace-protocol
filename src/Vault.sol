@@ -7,11 +7,24 @@ interface IFactory {
     function transferReward(address recipient, uint amount) external;
 }
 
+interface IPool is IERC20 {
+    function asset() external view returns (address);
+    function deposit(uint256 assets) external returns (uint256 shares);
+    function withdraw(uint256 assets) external returns (uint256 shares);
+}
+
+interface IWETH is IERC20 {
+    function deposit() external payable;
+    function withdraw(uint wad) external;
+}
+
 contract Vault {
 
     using SafeERC20 for IERC20;
     uint constant MANTISSA = 1e18;
+    IPool public immutable pool;
     IERC20 public immutable asset;
+    bool public immutable isWETH;
     IFactory public factory;
     uint public rewardBudget;
     uint public lastUpdate;
@@ -27,12 +40,21 @@ contract Vault {
     mapping (address => uint) public accruedRewards;
 
     constructor(
-        IERC20 _asset,
-        uint _initialRewardBudget
+        address _pool,
+        uint _initialRewardBudget,
+        bool _isWETH
     ) {
-        asset = _asset;
+        pool = IPool(_pool);
+        asset = IERC20(IPool(_pool).asset());
         factory = IFactory(msg.sender);
         rewardBudget = _initialRewardBudget;
+        isWETH = _isWETH;
+        asset.approve(_pool, type(uint256).max);
+    }
+
+    modifier onlyWETH() {
+        require(isWETH, "onlyWETH");
+        _;
     }
 
     function updateIndex(address user) internal {
@@ -52,18 +74,64 @@ contract Vault {
         accruedRewards[user] += accountDelta / MANTISSA;
     }
 
-    function deposit(uint amount, address recipient) public {
+    function reapprove() external {
+        asset.approve(address(pool), type(uint256).max);
+    }
+
+    function depositShares(uint amount, address recipient) public {
         updateIndex(recipient);
         balanceOf[recipient] += amount;
         totalSupply += amount;
+        pool.transferFrom(msg.sender, address(this), amount);
+    }
+
+    function depositShares(uint amount) external {
+        depositShares(amount, msg.sender);
+    }
+
+    function depositUnderlying(uint amount, address recipient) public {
+        updateIndex(recipient);
         asset.safeTransferFrom(msg.sender, address(this), amount);
+        uint shares = pool.deposit(amount);
+        balanceOf[recipient] += shares;
+        totalSupply += shares;
     }
 
-    function deposit(uint amount) external {
-        deposit(amount, msg.sender);
+    function depositUnderlying(uint amount) external {
+        depositUnderlying(amount, msg.sender);
     }
 
-    function withdraw(uint amount, address recipient, address owner) public {
+    function depositETH(address recipient) public payable onlyWETH {
+        updateIndex(recipient);
+        IWETH(address(asset)).deposit{value: msg.value}();
+        uint shares = pool.deposit(msg.value);
+        balanceOf[recipient] += shares;
+        totalSupply += shares;
+    }
+
+    function depositETH() external payable onlyWETH {
+        depositETH(msg.sender);
+    }
+
+    function withdrawETH(uint amount, address payable recipient, address owner) public onlyWETH {
+        updateIndex(owner);
+        uint shares = pool.withdraw(amount);
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+        balanceOf[owner] -= shares;
+        totalSupply -= shares;
+        IWETH(address(asset)).withdraw(amount);
+        recipient.transfer(amount);
+    }
+
+    function withdrawETH(uint amount) external onlyWETH {
+        withdrawETH(amount, payable(msg.sender), msg.sender);
+    }
+
+    function withdrawShares(uint amount, address recipient, address owner) public {
         updateIndex(owner);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -72,11 +140,28 @@ contract Vault {
         }
         balanceOf[owner] -= amount;
         totalSupply -= amount;
+        pool.transfer(recipient, amount);
+    }
+
+    function withdrawShares(uint amount) external {
+        withdrawShares(amount, msg.sender, msg.sender);
+    }
+
+    function withdrawUnderlying(uint amount, address recipient, address owner) public {
+        updateIndex(owner);
+        uint shares = pool.withdraw(amount);
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+        balanceOf[owner] -= shares;
+        totalSupply -= shares;
         asset.safeTransfer(recipient, amount);
     }
 
-    function withdraw(uint amount) external {
-        withdraw(amount, msg.sender, msg.sender);
+    function withdrawUnderlying(uint amount) external {
+        withdrawUnderlying(amount, msg.sender, msg.sender);
     }
 
     function claimable(address user) public view returns(uint) {

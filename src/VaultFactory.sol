@@ -10,12 +10,14 @@ interface IGTR {
 contract VaultFactory {
 
     IGTR public immutable gtr;
+    address public immutable weth;
     address public operator;
     mapping (address => bool) public isVault;
     address[] public allVaults;
 
-    constructor (address _gtr) {
+    constructor (address _gtr, address _weth) {
         gtr = IGTR(_gtr);
+        weth = _weth;
         operator = msg.sender;
     }
 
@@ -24,13 +26,15 @@ contract VaultFactory {
     }
 
     function createVault(
-        address asset,
+        address pool,
         uint initialRewardBudget
     ) external returns (address vault) {
         require(msg.sender == operator, "onlyOperator");
+        bool isWETH = IPool(pool).asset() == weth;
         vault = address(new Vault(
-            IERC20(asset),
-            initialRewardBudget
+            address(pool),
+            initialRewardBudget,
+            isWETH
         ));
         isVault[vault] = true;
         allVaults.push(vault);

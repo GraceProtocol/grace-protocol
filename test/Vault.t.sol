@@ -7,26 +7,26 @@ import "./mocks/ERC20.sol";
 
 contract VaultHandler is Test {
 
-    ERC20 public asset;
+    ERC20 public pool;
     Vault public vault;
 
     uint public sumOfDeposits;
 
-    constructor(Vault _vault, ERC20 _asset) {
+    constructor(Vault _vault, ERC20 _pool) {
         vault = _vault;
-        asset = _asset;
+        pool = _pool;
     }
 
     function deposit(uint amount) public {
-        asset.mint(address(this), amount);
-        asset.approve(address(vault), amount);
-        vault.deposit(amount, address(this));
+        pool.mint(address(this), amount);
+        pool.approve(address(vault), amount);
+        vault.depositShares(amount, address(this));
         sumOfDeposits += amount;
     }
 
     function withdraw(uint amount) public {
         amount = bound(amount, 0, sumOfDeposits);
-        vault.withdraw(amount, address(this), address(this));
+        vault.withdrawShares(amount, address(this), address(this));
         sumOfDeposits -= amount;
     }
 
@@ -35,21 +35,31 @@ contract VaultHandler is Test {
     }
 }
 
+contract MockPool is ERC20 {
+    
+    ERC20 public asset;
+
+    constructor() {
+        asset = new ERC20();
+    }
+}
+
 contract VaultTest is Test {
 
-    ERC20 public asset;
+    MockPool public pool;
     ERC20 public reward;
     Vault public vault;
     VaultHandler public handler;
 
     function setUp() public {
-        asset = new ERC20();
+        pool = new MockPool();
         reward = new ERC20();
         vault = new Vault(
-            IERC20(address(asset)),
-            1000e18
+            address(pool),
+            1000e18,
+            false
         );
-        handler = new VaultHandler(vault, asset);
+        handler = new VaultHandler(vault, pool);
     }
 
     // mock
@@ -65,12 +75,12 @@ contract VaultTest is Test {
         assertEq(vault.balanceOf(address(handler)), handler.sumOfDeposits());
     }
 
-    function invariant_assetBalance() public {
-        assertEq(vault.totalSupply(), asset.balanceOf(address(vault)));
+    function invariant_poolBalance() public {
+        assertEq(vault.totalSupply(), pool.balanceOf(address(vault)));
     }
 
     function test_constructor() public {
-        assertEq(address(vault.asset()), address(asset));
+        assertEq(address(vault.pool()), address(pool));
         assertEq(vault.rewardBudget(), 1000e18);
         assertEq(address(vault.factory()), address(this));
     }
@@ -81,14 +91,14 @@ contract VaultTest is Test {
         // deposit
         assertEq(vault.balanceOf(address(handler)), amount);
         assertEq(vault.totalSupply(), amount);
-        assertEq(asset.balanceOf(address(handler)), 0);
-        assertEq(asset.balanceOf(address(vault)), amount);  
+        assertEq(pool.balanceOf(address(handler)), 0);
+        assertEq(pool.balanceOf(address(vault)), amount);  
         // withdraw
         handler.withdraw(amount);
         assertEq(vault.balanceOf(address(handler)), 0);
         assertEq(vault.totalSupply(), 0);
-        assertEq(asset.balanceOf(address(handler)), amount);
-        assertEq(asset.balanceOf(address(vault)), 0);
+        assertEq(pool.balanceOf(address(handler)), amount);
+        assertEq(pool.balanceOf(address(vault)), 0);
     }
 
     function test_claimable() public {
@@ -113,13 +123,13 @@ contract VaultTest is Test {
 
 
     function test_approve_withdrawOnBehalf() public {
-        asset.mint(address(this), 2e18);
-        asset.approve(address(vault), 2e18);
-        vault.deposit(1e18);
+        pool.mint(address(this), 2e18);
+        pool.approve(address(vault), 2e18);
+        vault.depositShares(1e18);
         vault.approve(address(1), 1e18);
         vm.prank(address(1));
-        vault.withdraw(1e18, address(1), address(this));   
-        assertEq(asset.balanceOf(address(1)), 1e18);          
+        vault.withdrawShares(1e18, address(1), address(this));   
+        assertEq(pool.balanceOf(address(1)), 1e18);          
     }
 
     function test_setBudget() public {

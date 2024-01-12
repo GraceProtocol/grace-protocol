@@ -6,6 +6,15 @@ import "../src/VaultFactory.sol";
 import "../src/Vault.sol";
 import "./mocks/ERC20.sol";
 
+contract MockPool is ERC20 {
+    
+    ERC20 public asset;
+
+    constructor() {
+        asset = new ERC20();
+    }
+}
+
 contract VaultFactoryTest is Test {
 
     ERC20 public gtr;
@@ -13,7 +22,7 @@ contract VaultFactoryTest is Test {
 
     function setUp() public {
         gtr = new ERC20();
-        vaultFactory = new VaultFactory(address(gtr));
+        vaultFactory = new VaultFactory(address(gtr), address(0x1));
     }
 
     function test_constructor() public {
@@ -25,15 +34,17 @@ contract VaultFactoryTest is Test {
 
         uint initialRewardBudget = 1000;
 
+        MockPool pool = new MockPool();
+
         Vault vault = Vault(vaultFactory.createVault(
-            address(0x1),
+            address(pool),
             initialRewardBudget
         ));
 
         assertEq(vaultFactory.allVaultsLength(), 1);
         assertEq(vaultFactory.allVaults(0), address(vault));
 
-        assertEq(address(vault.asset()), address(0x1));
+        assertEq(address(vault.pool()), address(pool));
         assertEq(vault.rewardBudget(), initialRewardBudget);
     }
 
@@ -46,8 +57,9 @@ contract VaultFactoryTest is Test {
     }
 
     function test_transferReward() public {
+        MockPool pool = new MockPool();
         address vault = vaultFactory.createVault(
-            address(0x1),
+            address(pool),
             1000
         );
 
@@ -59,8 +71,9 @@ contract VaultFactoryTest is Test {
     }
 
     function test_setBudget() public {
+        MockPool pool = new MockPool();
         address vault = vaultFactory.createVault(
-            address(0x1),
+            address(pool),
             1000
         );
 
