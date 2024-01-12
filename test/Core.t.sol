@@ -9,7 +9,7 @@ contract CoreTest is Test {
     Core public core;
 
     function setUp() public {
-        core = new Core(address(this), address(this), address(this), address(this), address(this));
+        core = new Core(address(this), address(this), address(this), address(this), address(this), address(this));
     }
 
     function test_constructor() public {

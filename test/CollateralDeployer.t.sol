@@ -13,7 +13,7 @@ contract CollateralDeployerTest is Test {
     }
 
     function test_deployCollateral() public {
-        address collateral = collateralDeployer.deployCollateral("Collateral", "COLL", address(this));
+        address collateral = collateralDeployer.deployCollateral("Collateral", "COLL", address(this), false);
         assertEq(Collateral(collateral).name(), "Collateral");
         assertEq(Collateral(collateral).symbol(), "COLL");
         assertEq(Collateral(collateral).decimals(), 18);

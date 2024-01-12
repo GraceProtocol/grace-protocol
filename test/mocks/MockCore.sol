@@ -15,9 +15,6 @@ contract MockCore {
     function onCollateralWithdraw(address, uint) external returns (bool) {
         return true;
     }
-    function onCollateralReceive(address) external returns (bool) {
-        return true;
-    }
     function onPoolDeposit(uint) external returns (bool) {
         return true;
     }

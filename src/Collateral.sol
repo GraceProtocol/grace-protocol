@@ -6,11 +6,15 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 interface ICollateralCore {
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
     function onCollateralWithdraw(address caller, uint256 amount) external returns (bool);
-    function onCollateralReceive(address recipient) external returns (bool);
     function getCollateralFeeBps(address collateral, uint lastFee, uint lastAccrued) external view returns (uint256);
     function feeDestination() external view returns (address);
     function globalLock(address caller) external;
     function globalUnlock() external;
+}
+
+interface IWETH is IERC20 {
+    function deposit() external payable;
+    function withdraw(uint256) external;
 }
 
 contract Collateral {
@@ -21,6 +25,7 @@ contract Collateral {
     string public symbol;
     uint8 public constant decimals = 18;
     IERC20 public immutable asset;
+    bool public isWETH;
     ICollateralCore public immutable core;
     uint public totalSupply;
     uint public lastAccrued;
@@ -35,10 +40,11 @@ contract Collateral {
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
 
-    constructor(string memory _name, string memory _symbol, IERC20 _asset, address _core) {
+    constructor(string memory _name, string memory _symbol, IERC20 _asset, bool _isWETH, address _core) {
         name = _name;
         symbol = _symbol;
         asset = _asset;
+        isWETH = _isWETH;
         core = ICollateralCore(_core);
         uint chainId;
         assembly {
@@ -59,6 +65,11 @@ contract Collateral {
         core.globalLock(msg.sender);
         _;
         core.globalUnlock();
+    }
+
+    modifier onlyWETH {
+        require(isWETH, "onlyWETH");
+        _;
     }
 
     function accrueFee() internal returns (uint _lastAccrued) {
@@ -164,7 +175,6 @@ contract Collateral {
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
         updateFee(_lastAccrued);
     }
@@ -173,33 +183,27 @@ contract Collateral {
         return deposit(assets, msg.sender);
     }
 
+    function depositETH(address recipient) public payable onlyWETH lock returns (uint256 shares) {
+        uint _lastAccrued = accrueFee();
+        require(core.onCollateralDeposit(recipient, msg.value), "beforeCollateralDeposit");
+        require((shares = previewDeposit(msg.value)) != 0, "zeroShares");
+        balanceOf[recipient] += shares;
+        totalSupply += shares;
+        IWETH(address(asset)).deposit{value: msg.value}();
+        lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        emit Deposit(msg.sender, recipient, msg.value, shares);
+        updateFee(_lastAccrued);
+    }
+
+    function depositETH() public payable returns (uint256 shares) {
+        return depositETH(msg.sender);
+    }
 
     function previewMint(uint256 shares) public view returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : mulDivUp(shares, totalAssets(), supply);
-    }
-
-    function maxWithdraw(address owner) public view returns (uint256 assets) {
-        uint shares = getCollateralOf(owner);
-        assets = convertToAssets(shares);
-        if(assets > lastBalance - MINIMUM_BALANCE) {
-            assets = lastBalance - MINIMUM_BALANCE;
-        }
-    }
-
-    function maxRedeem(address owner) public view returns (uint256 assets) {
-        uint shares = maxWithdraw(owner);
-        return convertToAssets(shares);
-    }
-
-    function maxDeposit(address) public view returns (uint256 assets) {
-        return type(uint).max;
-    }
-
-    function maxMint(address owner) public view returns (uint256 shares) {
-        uint assets = maxDeposit(owner);
-        return convertToShares(assets);
     }
 
     function mint(uint256 shares, address recipient) public lock returns (uint256 assets) {
@@ -211,7 +215,6 @@ contract Collateral {
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        emit Transfer(address(0), recipient, shares);
         emit Deposit(msg.sender, recipient, assets, shares);
         updateFee(_lastAccrued);
     }
@@ -238,13 +241,39 @@ contract Collateral {
         asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
     }
 
     function withdraw(uint256 assets) public returns (uint256 shares) {
         return withdraw(assets, msg.sender, msg.sender);
+    }
+
+    function withdrawETH(
+        uint256 assets,
+        address payable receiver,
+        address owner
+    ) public onlyWETH lock returns (uint256 shares) {
+        uint _lastAccrued = accrueFee();
+        require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
+        shares = previewWithdraw(assets);
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+        totalSupply -= shares;
+        balanceOf[owner] -= shares;
+        IWETH(address(asset)).withdraw(assets);
+        lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        updateFee(_lastAccrued);
+        receiver.transfer(assets);
+    }
+
+    function withdrawETH(uint256 assets) public returns (uint256 shares) {
+        return withdrawETH(assets, payable(msg.sender), msg.sender);
     }
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
@@ -261,7 +290,6 @@ contract Collateral {
         asset.safeTransfer(receiver, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        emit Transfer(owner, address(0), shares);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
     }
@@ -270,29 +298,27 @@ contract Collateral {
         return redeem(shares, msg.sender, msg.sender);
     }
 
-    function transfer(address recipient, uint256 shares) public lock returns (bool) {
+    function redeemETH(uint256 shares, address payable receiver, address owner) public onlyWETH lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
-        uint assets = convertToAssets(shares);
-        require(core.onCollateralWithdraw(msg.sender, assets), "beforeCollateralWithdraw");
-        balanceOf[msg.sender] -= shares;
-        require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
-        balanceOf[recipient] += shares;
-        emit Transfer(msg.sender, recipient, shares);
+        assets = previewRedeem(shares);
+        require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+        totalSupply -= shares;
+        balanceOf[owner] -= shares;
+        IWETH(address(asset)).withdraw(assets);
+        lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
-        return true;
+        receiver.transfer(assets);
     }
 
-    function transferFrom(address sender, address recipient, uint256 shares) public lock returns (bool) {
-        uint _lastAccrued = accrueFee();
-        uint assets = convertToAssets(shares);
-        require(core.onCollateralWithdraw(sender, assets), "beforeCollateralWithdraw");
-        balanceOf[sender] -= shares;
-        allowance[sender][msg.sender] -= shares;
-        require(core.onCollateralReceive(recipient), "beforeCollateralReceive");
-        balanceOf[recipient] += shares;
-        emit Transfer(sender, recipient, shares);
-        updateFee(_lastAccrued);
-        return true;
+    function redeemETH(uint256 shares) public returns (uint256 assets) {
+        return redeemETH(shares, payable(msg.sender), msg.sender);
     }
 
     function approve(address spender, uint256 shares) public returns (bool) {
@@ -329,7 +355,6 @@ contract Collateral {
         asset.safeTransfer(to, assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
-        emit Transfer(account, address(0), shares);
         emit Withdraw(msg.sender, to, account, shares, assets);
         updateFee(_lastAccrued);
     }
@@ -344,7 +369,6 @@ contract Collateral {
         nonces[msg.sender]++;
     }    
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(

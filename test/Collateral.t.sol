@@ -17,6 +17,7 @@ contract CollateralTest is Test, MockCore {
             "Collateral",
             "COL",
             IERC20(address(asset)),
+            false,
             address(this)
         );
     }
@@ -79,31 +80,12 @@ contract CollateralTest is Test, MockCore {
         assertEq(collateral.getCollateralOf(address(this)), 1000);
     }
 
-    function test_transfer() public {
-        asset.mint(address(this), 1000);
-        asset.approve(address(collateral), 1000);
-        collateral.deposit(1000, address(this));
-        collateral.transfer(address(1), 1000);
-        assertEq(asset.balanceOf(address(collateral)), 1000);
-        assertEq(collateral.balanceOf(address(1)), 1000);
-        assertEq(collateral.totalSupply(), 1000);
-        assertEq(collateral.lastBalance(), 1000);
-        assertEq(collateral.getCollateralOf(address(1)), 1000);  
-    }
-
-    function test_approve_transferFrom() public {
+    function test_approve() public {
         asset.mint(address(this), 1000);
         asset.approve(address(collateral), 1000);
         collateral.deposit(1000, address(this));
         collateral.approve(address(1), 1000);
         assertEq(collateral.allowance(address(this), address(1)), 1000);
-        vm.prank(address(1));
-        collateral.transferFrom(address(this), address(1), 1000);
-        assertEq(asset.balanceOf(address(collateral)), 1000);
-        assertEq(collateral.balanceOf(address(1)), 1000);
-        assertEq(collateral.totalSupply(), 1000);
-        assertEq(collateral.lastBalance(), 1000);
-        assertEq(collateral.getCollateralOf(address(1)), 1000);  
     }
 
     function test_seize() public {

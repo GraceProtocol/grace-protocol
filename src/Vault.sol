@@ -89,7 +89,7 @@ contract Vault {
         depositShares(amount, msg.sender);
     }
 
-    function depositUnderlying(uint amount, address recipient) public {
+    function depositAsset(uint amount, address recipient) public {
         updateIndex(recipient);
         asset.safeTransferFrom(msg.sender, address(this), amount);
         uint shares = pool.deposit(amount);
@@ -97,8 +97,8 @@ contract Vault {
         totalSupply += shares;
     }
 
-    function depositUnderlying(uint amount) external {
-        depositUnderlying(amount, msg.sender);
+    function depositAsset(uint amount) external {
+        depositAsset(amount, msg.sender);
     }
 
     function depositETH(address recipient) public payable onlyWETH {
@@ -147,7 +147,7 @@ contract Vault {
         withdrawShares(amount, msg.sender, msg.sender);
     }
 
-    function withdrawUnderlying(uint amount, address recipient, address owner) public {
+    function withdrawAsset(uint amount, address recipient, address owner) public {
         updateIndex(owner);
         uint shares = pool.withdraw(amount);
         if (msg.sender != owner) {
@@ -160,8 +160,8 @@ contract Vault {
         asset.safeTransfer(recipient, amount);
     }
 
-    function withdrawUnderlying(uint amount) external {
-        withdrawUnderlying(amount, msg.sender, msg.sender);
+    function withdrawAsset(uint amount) external {
+        withdrawAsset(amount, msg.sender, msg.sender);
     }
 
     function claimable(address user) public view returns(uint) {

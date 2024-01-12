@@ -9,7 +9,7 @@ interface IPoolDeployer {
 }
 
 interface ICollateralDeployer {
-    function deployCollateral(string memory name, string memory symbol, address underlying) external returns (address collateral);
+    function deployCollateral(string memory name, string memory symbol, address underlying, bool isWETH) external returns (address collateral);
 }
 
 interface IBorrowController {
@@ -73,6 +73,7 @@ contract Core {
 
     IPoolDeployer public poolDeployer;
     ICollateralDeployer public collateralDeployer;
+    address public immutable WETH;
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
@@ -103,13 +104,21 @@ contract Core {
     ICollateral[] public collateralList;
     uint public collateralCount;
 
-    constructor(address _rateProvider, address _borrowController, address _oracle, address _poolDeployer, address _collateralDeployer) {
+    constructor(
+        address _rateProvider,
+        address _borrowController,
+        address _oracle,
+        address _poolDeployer,
+        address _collateralDeployer,
+        address _WETH
+    ) {
         owner = msg.sender;
         rateProvider = IRateProvider(_rateProvider);
         borrowController = IBorrowController(_borrowController);
         oracle = IOracle(_oracle);
         poolDeployer = IPoolDeployer(_poolDeployer);
         collateralDeployer = ICollateralDeployer(_collateralDeployer);
+        WETH = _WETH;
     }
 
     modifier onlyOwner() {
@@ -198,7 +207,8 @@ contract Core {
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
-        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(name, symbol, underlying));
+        bool isWETH = underlying == WETH;
+        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(name, symbol, underlying, isWETH));
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
@@ -354,17 +364,6 @@ contract Core {
                 }
             }
             collateralUsers[collateral][caller] = false;
-        }
-        return true;
-    }
-
-    function onCollateralReceive(address recipient) external returns (bool) {
-        ICollateral collateral = ICollateral(msg.sender);
-        require(collateralsData[collateral].enabled, "collateralNotEnabled");
-        if(collateralUsers[collateral][recipient] == false) {
-            collateralUsers[collateral][recipient] = true;
-            userCollaterals[recipient].push(collateral);
-            userCollateralsCount[recipient]++;
         }
         return true;
     }

@@ -50,7 +50,8 @@ contract SepoliaDeployerScript is Script {
             address(borrowController),
             address(oracle),
             address(poolDeployer),
-            address(collateralDeployer)
+            address(collateralDeployer),
+            weth
         );
 
         /*
