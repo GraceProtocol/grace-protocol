@@ -1,41 +1,41 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity 0.8.22;
 
-import "./StakingPool.sol";
+import "./Vault.sol";
 
 interface IGrace {
     function mint(address recipient, uint amount) external;
 }
 
-contract StakingFactory {
+contract VaultFactory {
 
     IGrace public immutable GRACE;
     address public operator;
-    mapping (address => bool) public isPool;
-    address[] public allPools;
+    mapping (address => bool) public isVault;
+    address[] public allVaults;
 
     constructor (address _grace) {
         GRACE = IGrace(_grace);
         operator = msg.sender;
     }
 
-    function allPoolsLength() external view returns (uint) {
-        return allPools.length;
+    function allVaultsLength() external view returns (uint) {
+        return allVaults.length;
     }
 
-    function createPool(
+    function createVault(
         address asset,
         uint initialRewardBudget
-    ) external returns (address pool) {
+    ) external returns (address vault) {
         require(msg.sender == operator, "onlyOperator");
-        pool = address(new StakingPool(
+        vault = address(new Vault(
             IERC20(asset),
             IERC20(address(GRACE)),
             initialRewardBudget
         ));
-        isPool[pool] = true;
-        allPools.push(pool);
-        emit PoolCreated(pool);
+        isVault[vault] = true;
+        allVaults.push(vault);
+        emit VaultCreated(vault);
     }
 
     function setOperator(address _operator) external {
@@ -44,16 +44,16 @@ contract StakingFactory {
     }
 
     function transferReward(address recipient, uint amount) external {
-        require(isPool[msg.sender], "onlyPool");
+        require(isVault[msg.sender], "onlyVault");
         GRACE.mint(recipient, amount);
     }
 
-    function setBudget(address pool, uint budget) external {
+    function setBudget(address vault, uint budget) external {
         require(msg.sender == operator, "onlyOperator");
-        require(isPool[pool], "onlyPool");
-        StakingPool(pool).setBudget(budget);
+        require(isVault[vault], "onlyVault");
+        Vault(vault).setBudget(budget);
     }
 
-    event PoolCreated(address pool);
+    event VaultCreated(address vault);
 
 }

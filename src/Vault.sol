@@ -7,7 +7,7 @@ interface IFactory {
     function transferReward(address recipient, uint amount) external;
 }
 
-contract StakingPool {
+contract Vault {
 
     using SafeERC20 for IERC20;
     uint constant MANTISSA = 1e18;

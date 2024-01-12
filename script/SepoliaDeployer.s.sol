@@ -9,7 +9,7 @@ import {RateModel} from "src/RateModel.sol";
 import {Grace} from "src/GRACE.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
-import {StakingFactory} from "src/StakingFactory.sol";
+import {VaultFactory} from "src/VaultFactory.sol";
 import {Helper} from "src/Helper.sol";
 import {Oracle} from "src/Oracle.sol";
 import {RateProvider} from "src/RateProvider.sol";
@@ -74,17 +74,17 @@ contract SepoliaDeployerScript is Script {
         core.setFeeDestination(address(reserve));
 
         /*
-            Deploy StakingFactory
+            Deploy VaultFactory
         */  
-        StakingFactory stakingFactory = new StakingFactory(address(grace));
-        // Set stakingFactory as Grace minter
-        grace.setMinter(address(stakingFactory), type(uint).max, type(uint).max);
+        VaultFactory vaultFactory = new VaultFactory(address(grace));
+        // Set vaultFactory as Grace minter
+        grace.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
 
         /*
             Deploy USDC pool (YEENUS) and staking pool
         */
         address Dai = address(new ERC20());
-        deployPool(core, stakingFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
 
         /*
             Deploy WETH collateral
@@ -98,11 +98,11 @@ contract SepoliaDeployerScript is Script {
 
     function deployPool(
         Core core,
-        StakingFactory stakingFactory, // if address(0), no staking pool will be created
+        VaultFactory vaultFactory, // if address(0), no staking pool will be created
         address asset,
         address feed,
         uint fixedPrice,
-        uint depositCap) public returns (address pool, address stakingPool) {
+        uint depositCap) public returns (address pool, address vault) {
         string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
         string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
         Oracle oracle = Oracle(address(core.oracle()));
@@ -112,9 +112,9 @@ contract SepoliaDeployerScript is Script {
             oracle.setPoolFixedPrice(asset, fixedPrice);
         }
         pool = core.deployPool(name, symbol, asset, depositCap);
-        if(address(stakingFactory) != address(0)) {
+        if(address(vaultFactory) != address(0)) {
             uint initialBudget = 1000 * 1e18;
-            stakingPool = stakingFactory.createPool(
+            vault = vaultFactory.createVault(
                 pool,
                 initialBudget
             );
