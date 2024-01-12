@@ -34,7 +34,6 @@ contract VaultFactoryTest is Test {
         assertEq(vaultFactory.allVaults(0), address(vault));
 
         assertEq(address(vault.asset()), address(0x1));
-        assertEq(address(vault.reward()), address(gtr));
         assertEq(vault.rewardBudget(), initialRewardBudget);
     }
 

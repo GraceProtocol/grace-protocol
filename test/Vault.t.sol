@@ -8,15 +8,13 @@ import "./mocks/ERC20.sol";
 contract VaultHandler is Test {
 
     ERC20 public asset;
-    ERC20 public reward;
     Vault public vault;
 
     uint public sumOfDeposits;
 
-    constructor(Vault _vault, ERC20 _asset, ERC20 _reward) {
+    constructor(Vault _vault, ERC20 _asset) {
         vault = _vault;
         asset = _asset;
-        reward = _reward;
     }
 
     function deposit(uint amount) public {
@@ -49,10 +47,9 @@ contract VaultTest is Test {
         reward = new ERC20();
         vault = new Vault(
             IERC20(address(asset)),
-            IERC20(address(reward)),
             1000e18
         );
-        handler = new VaultHandler(vault, asset, reward);
+        handler = new VaultHandler(vault, asset);
     }
 
     // mock
@@ -74,7 +71,6 @@ contract VaultTest is Test {
 
     function test_constructor() public {
         assertEq(address(vault.asset()), address(asset));
-        assertEq(address(vault.reward()), address(reward));
         assertEq(vault.rewardBudget(), 1000e18);
         assertEq(address(vault.factory()), address(this));
     }

@@ -30,7 +30,6 @@ contract VaultFactory {
         require(msg.sender == operator, "onlyOperator");
         vault = address(new Vault(
             IERC20(asset),
-            IERC20(address(gtr)),
             initialRewardBudget
         ));
         isVault[vault] = true;

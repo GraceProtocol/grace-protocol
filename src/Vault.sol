@@ -12,7 +12,6 @@ contract Vault {
     using SafeERC20 for IERC20;
     uint constant MANTISSA = 1e18;
     IERC20 public immutable asset;
-    IERC20 public immutable reward;
     IFactory public factory;
     uint public rewardBudget;
     uint public lastUpdate;
@@ -29,11 +28,9 @@ contract Vault {
 
     constructor(
         IERC20 _asset,
-        IERC20 _reward,
         uint _initialRewardBudget
     ) {
         asset = _asset;
-        reward = _reward;
         factory = IFactory(msg.sender);
         rewardBudget = _initialRewardBudget;
     }
