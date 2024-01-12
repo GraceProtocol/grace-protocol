@@ -9,7 +9,7 @@ interface IPoolDeployer {
 }
 
 interface ICollateralDeployer {
-    function deployCollateral(string memory name, string memory symbol, address underlying, bool isWETH) external returns (address collateral);
+    function deployCollateral(address underlying, bool isWETH) external returns (address collateral);
 }
 
 interface IBorrowController {
@@ -195,8 +195,6 @@ contract Core {
     }
 
     function deployCollateral(
-        string memory name,
-        string memory symbol,
         address underlying,
         uint collateralFactor,
         uint hardCapUsd,
@@ -209,7 +207,7 @@ contract Core {
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
         bool isWETH = underlying == WETH;
-        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(name, symbol, underlying, isWETH));
+        ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(underlying, isWETH));
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,

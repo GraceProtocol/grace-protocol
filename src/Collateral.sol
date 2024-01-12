@@ -21,9 +21,6 @@ contract Collateral {
 
     using SafeERC20 for IERC20;
 
-    string public name;
-    string public symbol;
-    uint8 public constant decimals = 18;
     IERC20 public immutable asset;
     bool public isWETH;
     ICollateralCore public immutable core;
@@ -40,9 +37,7 @@ contract Collateral {
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
 
-    constructor(string memory _name, string memory _symbol, IERC20 _asset, bool _isWETH, address _core) {
-        name = _name;
-        symbol = _symbol;
+    constructor(IERC20 _asset, bool _isWETH, address _core) {
         asset = _asset;
         isWETH = _isWETH;
         core = ICollateralCore(_core);
@@ -53,7 +48,7 @@ contract Collateral {
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
-                keccak256(bytes(name)),
+                keccak256(bytes("Grace Collateral")),
                 keccak256(bytes('1')),
                 chainId,
                 address(this)

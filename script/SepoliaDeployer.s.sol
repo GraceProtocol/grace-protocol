@@ -127,10 +127,8 @@ contract SepoliaDeployerScript is Script {
         uint collateralFactorBps,
         uint hardCapUsd,
         uint softCapBps) public returns (address) {
-        string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(underlying).symbol(), " Collateral"));
-        string memory symbol = string(abi.encodePacked("gc", IERC20Metadata(underlying).symbol()));
         Oracle oracle = Oracle(address(core.oracle()));
         oracle.setCollateralFeed(underlying, feed);
-        return core.deployCollateral(name, symbol, underlying, collateralFactorBps, hardCapUsd, softCapBps);
+        return core.deployCollateral(underlying, collateralFactorBps, hardCapUsd, softCapBps);
     }
 }

@@ -14,8 +14,6 @@ contract CollateralTest is Test, MockCore {
     function setUp() public {
         asset = new ERC20();
         collateral = new Collateral(
-            "Collateral",
-            "COL",
             IERC20(address(asset)),
             false,
             address(this)
@@ -23,9 +21,6 @@ contract CollateralTest is Test, MockCore {
     }
 
     function test_constructor() public {
-        assertEq(collateral.name(), "Collateral");
-        assertEq(collateral.symbol(), "COL");
-        assertEq(collateral.decimals(), 18);
         assertEq(address(collateral.asset()), address(asset));
         assertEq(address(collateral.core()), address(this));
     }
