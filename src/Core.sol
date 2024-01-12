@@ -91,8 +91,6 @@ contract Core {
     uint public lastDailyBorrowLimitRemainingUsd = 100000e18; // $100,000
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
-    mapping (address => IPool) public underlyingToPool;
-    mapping (address => ICollateral) public underlyingToCollateral;
     mapping (ICollateral => mapping (address => bool)) public collateralUsers;
     mapping (IPool => mapping (address => bool)) public poolBorrowers;
     mapping (address => ICollateral[]) public userCollaterals;
@@ -170,7 +168,6 @@ contract Core {
         address underlying,
         uint depositCap
     ) public onlyOwner returns (address) {
-        require(underlyingToPool[underlying] == IPool(address(0)), "underlyingAlreadyAdded");
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
@@ -185,7 +182,6 @@ contract Core {
         });
         poolList.push(pool);
         poolCount++;
-        underlyingToPool[underlying] = pool;
         return address(pool);
     }
 
@@ -200,7 +196,6 @@ contract Core {
         uint hardCapUsd,
         uint softCapBps
     ) public onlyOwner returns (address) {
-        require(underlyingToCollateral[underlying] == ICollateral(address(0)), "underlyingAlreadyAdded");
         require(collateralFactor < 10000, "collateralFactorTooHigh");
         require(softCapBps <= 10000, "softCapTooHigh");
         uint size;
@@ -222,7 +217,6 @@ contract Core {
         });
         collateralList.push(collateral);
         collateralCount++;
-        underlyingToCollateral[underlying] = collateral;
         return address(collateral);
     }
 
