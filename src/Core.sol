@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./EMA.sol";
 
 interface IPoolDeployer {
-    function deployPool(string memory name, string memory symbol, address underlying) external returns (address pool);
+    function deployPool(string memory name, string memory symbol, address underlying, bool isWETH) external returns (address pool);
 }
 
 interface ICollateralDeployer {
@@ -174,7 +174,8 @@ contract Core {
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
-        IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying));
+        bool isWETH = underlying == WETH;
+        IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying, isWETH));
         EMA.EMAState memory emaState;
         emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({

@@ -17,6 +17,7 @@ contract PoolTest is Test, MockCore {
             "Pool",
             "POOL",
             IERC20(address(asset)),
+            false,
             address(this)
         );
     }

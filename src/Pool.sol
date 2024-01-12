@@ -15,6 +15,11 @@ interface IPoolCore {
     function poolsData(address pool) external view returns (bool enabled, uint depositCap, bool borrowPaused, bool borrowSuspended);
 }
 
+interface IWETH {
+    function deposit() external payable;
+    function withdraw(uint) external;
+}
+
 contract Pool {
 
     using SafeERC20 for IERC20;
@@ -23,6 +28,7 @@ contract Pool {
     string public symbol;
     uint8 public constant decimals = 18;
     IERC20 public immutable asset;
+    bool public immutable isWETH;
     IPoolCore public immutable core;
     uint256 internal constant MAX_UINT256 = 2**256 - 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -45,11 +51,13 @@ contract Pool {
         string memory _name,
         string memory _symbol,
         IERC20 _asset,
+        bool _isWETH,
         address _core
     ) {
         name = _name;
         symbol = _symbol;
         asset = _asset;
+        isWETH = _isWETH;
         core = IPoolCore(_core);
         PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
         PERMIT_BORROW_TYPEHASH = keccak256("PermitBorrow(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
@@ -72,6 +80,11 @@ contract Pool {
         core.globalLock(msg.sender);
         _;
         core.globalUnlock();
+    }
+
+    modifier onlyWETH {
+        require(isWETH, "onlyWETH");
+        _;
     }
 
     function accrueInterest() internal returns (uint _lastAccrued) {
@@ -371,6 +384,30 @@ contract Pool {
         borrow(amount, msg.sender, msg.sender);
     }
 
+    function borrowETH(uint256 amount, address owner, address payable recipient) public payable lock onlyWETH {
+        uint _lastAccrued = accrueInterest();
+        require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
+        if (msg.sender != owner) {
+            uint256 allowed = borrowAllowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) borrowAllowance[owner][msg.sender] = allowed - amount;
+        }
+        uint debtShares;
+        require((debtShares = previewBorrow(amount)) != 0, "zeroShares");
+        debtSharesOf[owner] += debtShares;
+        debtSupply += debtShares;
+        totalDebt += amount;
+        IWETH(address(asset)).withdraw(amount);
+        lastBalance = asset.balanceOf(address(this));
+        require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
+        updateBorrowRate(_lastAccrued);
+        recipient.transfer(amount);
+    }
+
+    function borrowETH(uint256 amount) public payable {
+        borrowETH(amount, msg.sender, payable(msg.sender));
+    }
+
     function previewRepay(uint256 assets) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
@@ -393,6 +430,23 @@ contract Pool {
 
     function repay(uint amount) public {
         repay(msg.sender, amount);
+    }
+
+    function repayETH(address payable to) public payable lock onlyWETH {
+        uint _lastAccrued = accrueInterest();
+        require(core.onPoolRepay(to, msg.value), "beforePoolRepay");
+        uint debtShares;
+        require((debtShares = previewRepay(msg.value)) != 0, "zeroShares");
+        debtSharesOf[to] -= debtShares;
+        debtSupply -= debtShares;
+        totalDebt -= msg.value;
+        IWETH(address(asset)).deposit{value: msg.value}();
+        lastBalance = asset.balanceOf(address(this));
+        updateBorrowRate(_lastAccrued);
+    }
+
+    function repayETH() public payable {
+        repayETH(payable(msg.sender));
     }
 
     function writeOff(address account) public lock {
