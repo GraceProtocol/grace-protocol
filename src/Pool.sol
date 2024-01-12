@@ -432,7 +432,7 @@ contract Pool {
         repay(msg.sender, amount);
     }
 
-    function repayETH(address payable to) public payable lock onlyWETH {
+    function repayETH(address to) public payable lock onlyWETH {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolRepay(to, msg.value), "beforePoolRepay");
         uint debtShares;
@@ -446,7 +446,7 @@ contract Pool {
     }
 
     function repayETH() public payable {
-        repayETH(payable(msg.sender));
+        repayETH(msg.sender);
     }
 
     function writeOff(address account) public lock {
