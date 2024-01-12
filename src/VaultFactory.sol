@@ -3,19 +3,19 @@ pragma solidity 0.8.22;
 
 import "./Vault.sol";
 
-interface IGrace {
+interface IGTR {
     function mint(address recipient, uint amount) external;
 }
 
 contract VaultFactory {
 
-    IGrace public immutable GRACE;
+    IGTR public immutable gtr;
     address public operator;
     mapping (address => bool) public isVault;
     address[] public allVaults;
 
-    constructor (address _grace) {
-        GRACE = IGrace(_grace);
+    constructor (address _gtr) {
+        gtr = IGTR(_gtr);
         operator = msg.sender;
     }
 
@@ -30,7 +30,7 @@ contract VaultFactory {
         require(msg.sender == operator, "onlyOperator");
         vault = address(new Vault(
             IERC20(asset),
-            IERC20(address(GRACE)),
+            IERC20(address(gtr)),
             initialRewardBudget
         ));
         isVault[vault] = true;
@@ -45,7 +45,7 @@ contract VaultFactory {
 
     function transferReward(address recipient, uint amount) external {
         require(isVault[msg.sender], "onlyVault");
-        GRACE.mint(recipient, amount);
+        gtr.mint(recipient, amount);
     }
 
     function setBudget(address vault, uint budget) external {

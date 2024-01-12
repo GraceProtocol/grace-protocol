@@ -6,7 +6,7 @@ import {PoolDeployer} from "src/PoolDeployer.sol";
 import {CollateralDeployer} from "src/CollateralDeployer.sol";
 import {Core} from "src/Core.sol";
 import {RateModel} from "src/RateModel.sol";
-import {Grace} from "src/GRACE.sol";
+import {GTR} from "src/GTR.sol";
 import {Reserve, IERC20} from "src/Reserve.sol";
 import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
@@ -62,23 +62,23 @@ contract SepoliaDeployerScript is Script {
         rateProvider.setDefaultInterestRateModel(address(rateModel));
 
         /*
-            Deploy GRACE
+            Deploy GTR
         */        
-        Grace grace = new Grace(deployer);
+        GTR gtr = new GTR(deployer);
 
         /*
             Deploy Reserve
         */   
-        Reserve reserve = new Reserve(address(grace));
+        Reserve reserve = new Reserve(address(gtr));
         // Set reserve as fee destination
         core.setFeeDestination(address(reserve));
 
         /*
             Deploy VaultFactory
         */  
-        VaultFactory vaultFactory = new VaultFactory(address(grace));
+        VaultFactory vaultFactory = new VaultFactory(address(gtr));
         // Set vaultFactory as Grace minter
-        grace.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
+        gtr.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
 
         /*
             Deploy USDC pool (YEENUS) and staking pool

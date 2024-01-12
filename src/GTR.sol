@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity 0.8.22;
 
-contract Grace {
+contract GTR {
     /// @notice EIP-20 token name for this token
-    string public constant name = "Grace";
+    string public constant name = "Grace Tokenized Reserve";
 
     /// @notice EIP-20 token symbol for this token
-    string public constant symbol = "GRACE";
+    string public constant symbol = "GTR";
 
     /// @notice EIP-20 token decimals for this token
     uint8 public constant decimals = 18;
@@ -87,7 +87,7 @@ contract Grace {
     event MinterChanged(address indexed minter, uint newAllowance, uint newDailyLimit);
 
     /**
-     * @notice Construct a new Grace token
+     * @notice Construct a new GTR token
      * @param _operator TThe account with minting ability
      */
     constructor(address _operator) {
@@ -99,7 +99,7 @@ contract Grace {
      * @notice Allow transfers
      */
     function openTheGates() external {
-        require(msg.sender == operator, "Grace::openTheGates: only the operator can allow transfers");
+        require(msg.sender == operator, "GTR::openTheGates: only the operator can allow transfers");
         transferable = true;
     }
 
@@ -109,7 +109,7 @@ contract Grace {
      * @param isWhitelisted Whether or not the address should be whitelisted
      */
     function setSourceWhitelist(address account, bool isWhitelisted) external {
-        require(msg.sender == operator, "Grace::setSourceWhitelist: only the operator can set the source whitelist");
+        require(msg.sender == operator, "GTR::setSourceWhitelist: only the operator can set the source whitelist");
         sourceWhitelist[account] = isWhitelisted;
     }
 
@@ -119,7 +119,7 @@ contract Grace {
      * @param isWhitelisted Whether or not the address should be whitelisted
      */
     function setDestinationWhitelist(address account, bool isWhitelisted) external {
-        require(msg.sender == operator, "Grace::setDestinationWhitelist: only the operator can set the destination whitelist");
+        require(msg.sender == operator, "GTR::setDestinationWhitelist: only the operator can set the destination whitelist");
         destinationWhitelist[account] = isWhitelisted;
     }
 
@@ -130,7 +130,7 @@ contract Grace {
      * @param dailyLimit The amount of tokens the minter is allowed to mint per day
      */
     function setMinter(address minter_, uint mintableAllowance, uint dailyLimit) external {
-        require(msg.sender == operator, "Grace::setMinter: only the operator can set minters");
+        require(msg.sender == operator, "GTR::setMinter: only the operator can set minters");
         minters[minter_] = mintableAllowance;
         dailyMintLimits[minter_] = dailyLimit;
         emit MinterChanged(minter_, mintableAllowance, dailyLimit);
@@ -141,7 +141,7 @@ contract Grace {
      * @param operator_ The address of the new operator
      */
     function setOperator(address operator_) external {
-        require(msg.sender == operator, "Grace::setOperator: only the operator can change the operator address");
+        require(msg.sender == operator, "GTR::setOperator: only the operator can change the operator address");
         operator = operator_;
         emit OperatorChanged(operator, operator_);
     }
@@ -169,7 +169,7 @@ contract Grace {
         if (rawAmount == type(uint).max) {
             amount = type(uint96).max;
         } else {
-            amount = safe96(rawAmount, "Grace::approve: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "GTR::approve: amount exceeds 96 bits");
         }
 
         allowances[msg.sender][spender] = amount;
@@ -194,7 +194,7 @@ contract Grace {
      * @return Whether or not the transfer succeeded
      */
     function transfer(address dst, uint rawAmount) external returns (bool) {
-        uint96 amount = safe96(rawAmount, "Grace::transfer: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GTR::transfer: amount exceeds 96 bits");
         _transferTokens(msg.sender, dst, amount);
         return true;
     }
@@ -209,10 +209,10 @@ contract Grace {
     function transferFrom(address src, address dst, uint rawAmount) external returns (bool) {
         address spender = msg.sender;
         uint96 spenderAllowance = allowances[src][spender];
-        uint96 amount = safe96(rawAmount, "Grace::approve: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GTR::approve: amount exceeds 96 bits");
 
         if (spender != src && spenderAllowance != type(uint96).max) {
-            uint96 newAllowance = sub96(spenderAllowance, amount, "Grace::transferFrom: transfer amount exceeds spender allowance");
+            uint96 newAllowance = sub96(spenderAllowance, amount, "GTR::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
             emit Approval(src, spender, newAllowance);
@@ -244,9 +244,9 @@ contract Grace {
         bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "Grace::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "Grace::delegateBySig: invalid nonce");
-        require(block.timestamp <= expiry, "Grace::delegateBySig: signature expired");
+        require(signatory != address(0), "GTR::delegateBySig: invalid signature");
+        require(nonce == nonces[signatory]++, "GTR::delegateBySig: invalid nonce");
+        require(block.timestamp <= expiry, "GTR::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
 
@@ -268,7 +268,7 @@ contract Grace {
      * @return The number of votes the account had as of the given block
      */
     function getPriorVotes(address account, uint blockNumber) public view returns (uint96) {
-        require(blockNumber < block.number, "Grace::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "GTR::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -312,13 +312,13 @@ contract Grace {
     }
 
     function _transferTokens(address src, address dst, uint96 amount) internal {
-        require(src != address(0), "Grace::_transferTokens: cannot transfer from the zero address");
-        require(dst != address(0), "Grace::_transferTokens: cannot transfer to the zero address");
+        require(src != address(0), "GTR::_transferTokens: cannot transfer from the zero address");
+        require(dst != address(0), "GTR::_transferTokens: cannot transfer to the zero address");
         if (!transferable) {
-            require(sourceWhitelist[src] || destinationWhitelist[dst], "Grace::transfer: transfers are disabled");
+            require(sourceWhitelist[src] || destinationWhitelist[dst], "GTR::transfer: transfers are disabled");
         }
-        balances[src] = sub96(balances[src], amount, "Grace::_transferTokens: transfer amount exceeds balance");
-        balances[dst] = add96(balances[dst], amount, "Grace::_transferTokens: transfer amount overflows");
+        balances[src] = sub96(balances[src], amount, "GTR::_transferTokens: transfer amount exceeds balance");
+        balances[dst] = add96(balances[dst], amount, "GTR::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);
 
         _moveDelegates(delegates[src], delegates[dst], amount);
@@ -329,21 +329,21 @@ contract Grace {
             if (srcRep != address(0)) {
                 uint32 srcRepNum = numCheckpoints[srcRep];
                 uint96 srcRepOld = srcRepNum > 0 ? checkpoints[srcRep][srcRepNum - 1].votes : 0;
-                uint96 srcRepNew = sub96(srcRepOld, amount, "Grace::_moveVotes: vote amount underflows");
+                uint96 srcRepNew = sub96(srcRepOld, amount, "GTR::_moveVotes: vote amount underflows");
                 _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
             }
 
             if (dstRep != address(0)) {
                 uint32 dstRepNum = numCheckpoints[dstRep];
                 uint96 dstRepOld = dstRepNum > 0 ? checkpoints[dstRep][dstRepNum - 1].votes : 0;
-                uint96 dstRepNew = add96(dstRepOld, amount, "Grace::_moveVotes: vote amount overflows");
+                uint96 dstRepNew = add96(dstRepOld, amount, "GTR::_moveVotes: vote amount overflows");
                 _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
             }
         }
     }
 
     function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint96 oldVotes, uint96 newVotes) internal {
-      uint32 blockNumber = safe32(block.number, "Grace::_writeCheckpoint: block number exceeds 32 bits");
+      uint32 blockNumber = safe32(block.number, "GTR::_writeCheckpoint: block number exceeds 32 bits");
 
       if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
           checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -397,16 +397,16 @@ contract Grace {
         if (rawAmount == type(uint).max) {
             amount = type(uint96).max;
         } else {
-            amount = safe96(rawAmount, "Grace::permit: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "GTR::permit: amount exceeds 96 bits");
         }
 
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "Grace::permit: invalid signature");
-        require(signatory == owner, "Grace::permit: unauthorized");
-        require(block.timestamp <= deadline, "Grace::permit: signature expired");
+        require(signatory != address(0), "GTR::permit: invalid signature");
+        require(signatory == owner, "GTR::permit: unauthorized");
+        require(block.timestamp <= deadline, "GTR::permit: signature expired");
 
         allowances[owner][spender] = amount;
 
@@ -419,16 +419,16 @@ contract Grace {
      * @param rawAmount The number of tokens to be minted
      */
     function mint(address dst, uint rawAmount) external {
-        require(rawAmount + dailyMintTotals[msg.sender][block.timestamp / 1 days] <= dailyMintLimits[msg.sender], "Grace::mint: daily mint limit exceeded");
-        require(dst != address(0), "Grace::mint: cannot transfer to the zero address");
+        require(rawAmount + dailyMintTotals[msg.sender][block.timestamp / 1 days] <= dailyMintLimits[msg.sender], "GTR::mint: daily mint limit exceeded");
+        require(dst != address(0), "GTR::mint: cannot transfer to the zero address");
         minters[msg.sender] -= rawAmount;
         dailyMintTotals[msg.sender][block.timestamp / 1 days] += rawAmount;
         // mint the amount
-        uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
-        totalSupply = safe96(totalSupply + amount, "Grace::mint: totalSupply exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "GTR::mint: amount exceeds 96 bits");
+        totalSupply = safe96(totalSupply + amount, "GTR::mint: totalSupply exceeds 96 bits");
 
         // transfer the amount to the recipient
-        balances[dst] = add96(balances[dst], amount, "Grace::mint: transfer amount overflows");
+        balances[dst] = add96(balances[dst], amount, "GTR::mint: transfer amount overflows");
         emit Transfer(address(0), dst, amount);
 
         // move delegates
@@ -440,9 +440,9 @@ contract Grace {
      * @param rawAmount The number of tokens to be burned from the caller's balance
      */
     function burn(uint rawAmount) external returns (bool) {
-        uint96 amount = safe96(rawAmount, "Grace::mint: amount exceeds 96 bits");
-        balances[msg.sender] = sub96(balances[msg.sender], amount, "Grace::burn: burn amount exceeds balance");
-        totalSupply = safe96(totalSupply - amount, "Grace::burn: burn amount exceeds totalSupply");
+        uint96 amount = safe96(rawAmount, "GTR::mint: amount exceeds 96 bits");
+        balances[msg.sender] = sub96(balances[msg.sender], amount, "GTR::burn: burn amount exceeds balance");
+        totalSupply = safe96(totalSupply - amount, "GTR::burn: burn amount exceeds totalSupply");
         emit Transfer(msg.sender, address(0), amount);
         return true;
     }

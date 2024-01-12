@@ -8,16 +8,16 @@ import "./mocks/ERC20.sol";
 
 contract VaultFactoryTest is Test {
 
-    ERC20 public GRACE;
+    ERC20 public gtr;
     VaultFactory vaultFactory;
 
     function setUp() public {
-        GRACE = new ERC20();
-        vaultFactory = new VaultFactory(address(GRACE));
+        gtr = new ERC20();
+        vaultFactory = new VaultFactory(address(gtr));
     }
 
     function test_constructor() public {
-        assertEq(address(vaultFactory.GRACE()), address(GRACE));
+        assertEq(address(vaultFactory.gtr()), address(gtr));
         assertEq(vaultFactory.operator(), address(this));
     }
 
@@ -34,7 +34,7 @@ contract VaultFactoryTest is Test {
         assertEq(vaultFactory.allVaults(0), address(vault));
 
         assertEq(address(vault.asset()), address(0x1));
-        assertEq(address(vault.reward()), address(GRACE));
+        assertEq(address(vault.reward()), address(gtr));
         assertEq(vault.rewardBudget(), initialRewardBudget);
     }
 
@@ -56,7 +56,7 @@ contract VaultFactoryTest is Test {
         vaultFactory.transferReward(address(1), 100);
         vm.prank(vault);
         vaultFactory.transferReward(address(1), 100);
-        assertEq(GRACE.balanceOf(address(1)), 100);
+        assertEq(gtr.balanceOf(address(1)), 100);
     }
 
     function test_setBudget() public {
