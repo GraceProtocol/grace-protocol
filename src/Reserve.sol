@@ -3,7 +3,7 @@ pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-interface IGrace is IERC20 {
+interface IGTR is IERC20 {
     function burn(uint256 amount) external returns (bool);
 }
 
@@ -18,15 +18,15 @@ contract Reserve {
         address dst;
     }
 
-    IGrace public immutable grace;
+    IGTR public immutable gtr;
     address public owner;
     uint constant MANTISSA = 1e18;
     uint public locked = 1; // 1 = unlocked, 2 = locked
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
     PullRequest pullRequest;
 
-    constructor(address _grace) {
-        grace = IGrace(_grace);
+    constructor(address _gtr) {
+        gtr = IGTR(_gtr);
         owner = msg.sender;
     }
 
@@ -47,8 +47,8 @@ contract Reserve {
         require(locked == 1, "locked");
         locked = 2;
         PullRequest memory request = pullRequest;
-        require(block.timestamp > request.timestamp + 60 days, "tooSoon");
-        require(block.timestamp < request.timestamp + 90 days, "tooLate");
+        require(block.timestamp > request.timestamp + 14 days, "tooSoon");
+        require(block.timestamp < request.timestamp + 60 days, "tooLate");
         pullRequest = PullRequest(0, new uint256[](0), new IERC20[](0), address(0));
         for(uint i = 0; i < request.tokens.length; i++) {
             uint bal = request.tokens[i].balanceOf(address(this));
@@ -69,16 +69,14 @@ contract Reserve {
         );
     }
 
-    function rageQuit(uint256 graceAmount, IERC20[] memory tokens) external {
+    function rageQuit(uint256 gtrAmount, IERC20[] memory tokens) external {
         require(locked == 1, "locked");
         locked = 2;
         require(tokens.length > 0, "noTokens");
-        uint256 dayOfMonth = (block.timestamp / 1 days) % 30;
-        require(dayOfMonth == 0, "Only first day of each month");
-        grace.transferFrom(msg.sender, address(this), graceAmount);
-        uint totalSupply = grace.totalSupply();
-        grace.burn(graceAmount);
-        uint shareMantissa = graceAmount * MANTISSA / totalSupply;
+        gtr.transferFrom(msg.sender, address(this), gtrAmount);
+        uint totalSupply = gtr.totalSupply();
+        gtr.burn(gtrAmount);
+        uint shareMantissa = gtrAmount * MANTISSA / totalSupply;
         for(uint i = 0; i < tokens.length; i++) {
             for(uint j = i + 1; j < tokens.length; j++) {
                 require(tokens[i] != tokens[j], "duplicate token");
@@ -88,11 +86,11 @@ contract Reserve {
             uint out = balance * shareMantissa / MANTISSA;
             tokens[i].safeTransfer(msg.sender, out);
         }
-        emit RageQuit(msg.sender, graceAmount);
+        emit RageQuit(msg.sender, gtrAmount);
         locked = 1;
     }
 
-    event RageQuit(address indexed sender, uint256 graceAmount);
+    event RageQuit(address indexed sender, uint256 gtrAmount);
     event PullRequested(uint256[] amounts, IERC20[] tokens, address dst);
     event PullExecuted(uint256[] amounts, IERC20[] tokens, address dst);
 }

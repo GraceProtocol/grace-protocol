@@ -7,46 +7,39 @@ import "./mocks/ERC20.sol";
 
 contract ReserveTest is Test {
 
-    ERC20 public grace;
+    ERC20 public gtr;
     Reserve public reserve;
 
     function setUp() public {
-        grace = new ERC20();
-        reserve = new Reserve(address(grace));
+        gtr = new ERC20();
+        reserve = new Reserve(address(gtr));
     }
 
     function test_constructor() public {
-        assertEq(address(reserve.grace()), address(grace));
+        assertEq(address(reserve.gtr()), address(gtr));
         assertEq(address(reserve.owner()), address(this));
     }
 
     function test_rageQuit() public {
         ERC20 backing = new ERC20();
         backing.mint(address(reserve), 1000);
-        grace.mint(address(this), 1000);
+        gtr.mint(address(this), 1000);
         IERC20[] memory tokens = new IERC20[](1);
         tokens[0] = IERC20(address(backing));
-        grace.approve(address(reserve), 1000);
-        vm.warp(1 days);
+        gtr.approve(address(reserve), 1000);
 
-        // not first day of month
-        vm.expectRevert("Only first day of each month");
-        reserve.rageQuit(1000, tokens);
-
-        // success case
-        vm.warp(0);
         reserve.rageQuit(500, tokens);        
         assertEq(backing.balanceOf(address(this)), 500);
-        assertEq(grace.balanceOf(address(this)), 500);
-        assertEq(grace.totalSupply(), 500);
+        assertEq(gtr.balanceOf(address(this)), 500);
+        assertEq(gtr.totalSupply(), 500);
 
         // no duplicates
         backing.mint(address(reserve), 1000);
-        grace.mint(address(this), 1000);
+        gtr.mint(address(this), 1000);
         IERC20[] memory duplicateTokens = new IERC20[](2);
         duplicateTokens[0] = IERC20(address(backing));
         duplicateTokens[1] = IERC20(address(backing));
-        grace.approve(address(reserve), 1000);
+        gtr.approve(address(reserve), 1000);
         vm.expectRevert("duplicate token");
         reserve.rageQuit(1000, duplicateTokens);
 
@@ -80,9 +73,9 @@ contract ReserveTest is Test {
         vm.expectRevert("tooSoon");
         reserve.executePull();
         vm.expectRevert("tooLate");
-        vm.warp(block.timestamp + 90 days + 1);
+        vm.warp(block.timestamp + 60 days + 1);
         reserve.executePull();
-        vm.warp(block.timestamp - 30 days);
+        vm.warp(block.timestamp - 14 days);
         reserve.executePull();
         assertEq(backing.balanceOf(address(this)), 1000);
         assertEq(backing.balanceOf(address(reserve)), 0);
