@@ -36,10 +36,10 @@ contract VaultFactoryTest is Test {
 
         MockPool pool = new MockPool();
 
-        Vault vault = Vault(vaultFactory.createVault(
+        Vault vault = Vault(payable(vaultFactory.createVault(
             address(pool),
             initialRewardBudget
-        ));
+        )));
 
         assertEq(vaultFactory.allVaultsLength(), 1);
         assertEq(vaultFactory.allVaults(0), address(vault));
@@ -72,10 +72,10 @@ contract VaultFactoryTest is Test {
 
     function test_setBudget() public {
         MockPool pool = new MockPool();
-        address vault = vaultFactory.createVault(
+        address payable vault = payable(vaultFactory.createVault(
             address(pool),
             1000
-        );
+        ));
 
         vm.startPrank(address(1));
         vm.expectRevert("onlyOperator"); // not operator

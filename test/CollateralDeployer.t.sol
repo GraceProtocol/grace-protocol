@@ -14,8 +14,8 @@ contract CollateralDeployerTest is Test {
 
     function test_deployCollateral() public {
         address collateral = collateralDeployer.deployCollateral(address(this), false);
-        assertEq(address(Collateral(collateral).asset()), address(this));
-        assertEq(address(Collateral(collateral).core()), address(this));
+        assertEq(address(Collateral(payable(collateral)).asset()), address(this));
+        assertEq(address(Collateral(payable(collateral)).core()), address(this));
     }
 
 }

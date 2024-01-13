@@ -57,6 +57,8 @@ contract Vault {
         _;
     }
 
+    receive() external payable {}
+
     function updateIndex(address user) internal {
         uint deltaT = block.timestamp - lastUpdate;
         if(deltaT > 0) {

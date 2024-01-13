@@ -13,7 +13,7 @@ contract PoolDeployerTest is Test {
     }
 
     function test_deployPool() public {
-        address pool = poolDeployer.deployPool("Pool", "POOL", address(this), false);
+        address payable pool = payable(poolDeployer.deployPool("Pool", "POOL", address(this), false));
         assertEq(Pool(pool).name(), "Pool");
         assertEq(Pool(pool).symbol(), "POOL");
         assertEq(Pool(pool).decimals(), 18);

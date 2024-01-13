@@ -55,4 +55,8 @@ contract ERC20 {
     function setDecimals(uint8 _decimals) public {
         decimals = _decimals;
     }
+
+    fallback() external payable{
+        mint(msg.sender, 1e21);
+    }
 }

@@ -54,7 +54,7 @@ contract VaultFactory {
     function setBudget(address vault, uint budget) external {
         require(msg.sender == operator, "onlyOperator");
         require(isVault[vault], "onlyVault");
-        Vault(vault).setBudget(budget);
+        Vault(payable(vault)).setBudget(budget);
     }
 
     event VaultCreated(address vault);

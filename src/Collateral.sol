@@ -67,6 +67,8 @@ contract Collateral {
         _;
     }
 
+    receive() external payable {}
+
     function accrueFee() internal returns (uint _lastAccrued) {
         _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - lastAccrued;

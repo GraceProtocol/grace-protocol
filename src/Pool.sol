@@ -12,7 +12,7 @@ interface IPoolCore {
     function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
     function globalLock(address caller) external;
     function globalUnlock() external;
-    function poolsData(address pool) external view returns (bool enabled, uint depositCap, bool borrowPaused, bool borrowSuspended);
+    function poolsData(address pool) external view returns (bool enabled, uint depositCap, uint ema, uint lastUpdate);
 }
 
 interface IWETH {
@@ -86,6 +86,8 @@ contract Pool {
         require(isWETH, "onlyWETH");
         _;
     }
+
+    receive() external payable {}
 
     function accrueInterest() internal returns (uint _lastAccrued) {
         _lastAccrued = lastAccrued;

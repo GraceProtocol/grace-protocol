@@ -80,7 +80,7 @@ contract SepoliaDeployerScript is Script {
         gtr.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
 
         /*
-            Deploy Dai pool (YEENUS) and vault
+            Deploy Dai pool and vault
         */
         address Dai = address(new ERC20());
         deployPool(core, vaultFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
@@ -97,7 +97,7 @@ contract SepoliaDeployerScript is Script {
         deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
 
         /*
-            Deploy Dai collateral (YEENUS)
+            Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
         deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18, 2000);
