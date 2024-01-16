@@ -285,13 +285,24 @@ contract Core {
         return hardCap < softCap ? hardCap : softCap;
     }
 
+    function viewCollateralPriceMantissa(ICollateral collateral) external view returns (uint256) {
+        uint capUsd = getCapUsd(collateral);
+        return oracle.viewCollateralPriceMantissa(
+            address(this),
+            collateral.asset(),
+            getCollateralFactor(collateral),
+            collateral.totalAssets(),
+            capUsd
+        );
+    }
+
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool) {
         ICollateral collateral = ICollateral(msg.sender);
         require(collateralsData[collateral].enabled, "collateralNotEnabled");
         uint capUsd = getCapUsd(collateral);
         // get oracle price
         uint price = oracle.getCollateralPriceMantissa(
-            address(collateral),
+            collateral.asset(),
             getCollateralFactor(collateral),
             collateral.totalAssets(),
             capUsd
@@ -331,7 +342,7 @@ contract Core {
                 uint capUsd = getCapUsd(thisCollateral);
                 uint collateralFactorBps = getCollateralFactor(thisCollateral);
                 uint price = oracle.getCollateralPriceMantissa(
-                    address(thisCollateral),
+                    thisCollateral.asset(),
                     collateralFactorBps,
                     thisCollateral.totalAssets(),
                     capUsd
@@ -365,7 +376,7 @@ contract Core {
         uint capUsd = getCapUsd(ICollateral(collateral));
         uint price = oracle.viewCollateralPriceMantissa(
             address(this),
-            collateral,
+            ICollateral(collateral).asset(),
             getCollateralFactor(ICollateral(collateral)),
             ICollateral(collateral).totalAssets(),
             capUsd
@@ -399,7 +410,7 @@ contract Core {
     }
 
     function updateTotalSuppliedValue(IPool pool, uint totalAssets) internal {
-        uint price = oracle.getDebtPriceMantissa(address(pool));
+        uint price = oracle.getDebtPriceMantissa(pool.asset());
         uint totalValueUsd = totalAssets * price / MANTISSA;
         EMA.EMAState memory supplyEMA = poolsData[pool].supplyEMA;
         uint prevEMA = supplyEMA.ema;
@@ -425,7 +436,7 @@ contract Core {
             uint capUsd = getCapUsd(thisCollateral);
             uint collateralFactorBps = getCollateralFactor(thisCollateral);
             uint price = oracle.getCollateralPriceMantissa(
-                address(thisCollateral),
+                thisCollateral.asset(),
                 collateralFactorBps,
                 thisCollateral.totalAssets(),
                 capUsd
@@ -441,7 +452,7 @@ contract Core {
             IPool thisPool = borrowerPools[caller][i];
             uint debt = thisPool.getDebtOf(caller);
             if(thisPool == pool) debt += amount;
-            uint price = oracle.getDebtPriceMantissa(address(thisPool));
+            uint price = oracle.getDebtPriceMantissa(thisPool.asset());
             uint debtUsd = debt * price / MANTISSA;
             if(thisPool == pool) {
                 if(borrowController != IBorrowController(address(0))) {
@@ -477,7 +488,7 @@ contract Core {
         }
 
         if(borrowController != IBorrowController(address(0))) {
-            borrowController.onRepay(msg.sender, recipient, amount, oracle.getDebtPriceMantissa(msg.sender));
+            borrowController.onRepay(msg.sender, recipient, amount, oracle.getDebtPriceMantissa(pool.asset()));
         }
         return true;
     }
@@ -499,14 +510,14 @@ contract Core {
         {
             uint liabilitiesUsd;
             {
-                uint poolDebtUsd = pool.getDebtOf(borrower) * oracle.getDebtPriceMantissa(address(pool)) / MANTISSA;
+                uint poolDebtUsd = pool.getDebtOf(borrower) * oracle.getDebtPriceMantissa(pool.asset()) / MANTISSA;
                 // calculate liabilities
                 liabilitiesUsd = poolDebtUsd;
                 for (uint i = 0; i < borrowerPools[borrower].length; i++) {
                     IPool thisPool = borrowerPools[borrower][i];
                     if (thisPool != pool) {
                         uint debt = thisPool.getDebtOf(borrower);
-                        uint price = oracle.getDebtPriceMantissa(address(thisPool));
+                        uint price = oracle.getDebtPriceMantissa(thisPool.asset());
                         uint debtUsd = debt * price / MANTISSA;
                         require(debtUsd <= poolDebtUsd, "notMostDebtPool");
                         liabilitiesUsd += debtUsd;
@@ -519,7 +530,7 @@ contract Core {
             {
                 // keep track of most valuable collateral
                 uint collateralBalanceUsd = collateral.getCollateralOf(borrower) * oracle.getCollateralPriceMantissa(
-                    address(collateral),
+                    collateral.asset(),
                     getCollateralFactor(collateral),
                     collateral.totalAssets(),
                     getCapUsd(collateral)
@@ -530,7 +541,7 @@ contract Core {
                     uint capUsd = getCapUsd(thisCollateral);
                     uint collateralFactorBps = getCollateralFactor(thisCollateral);
                     uint price = oracle.getCollateralPriceMantissa(
-                        address(thisCollateral),
+                        thisCollateral.asset(),
                         collateralFactorBps,
                         thisCollateral.totalAssets(),
                         capUsd
@@ -548,10 +559,10 @@ contract Core {
 
         {
             // calculate collateral reward
-            uint debtPrice = oracle.getDebtPriceMantissa(address(pool));
+            uint debtPrice = oracle.getDebtPriceMantissa(pool.asset());
             uint debtValue = debtAmount * debtPrice / MANTISSA;
             uint collateralPrice = oracle.getCollateralPriceMantissa(
-                address(collateral),
+                collateral.asset(),
                 getCollateralFactor(collateral),
                 collateral.totalAssets(),
                 getCapUsd(collateral)
@@ -591,7 +602,7 @@ contract Core {
         for (uint i = 0; i < borrowerPools[borrower].length; i++) {
             IPool thisPool = borrowerPools[borrower][i];
             uint debt = thisPool.getDebtOf(borrower);
-            uint price = oracle.getDebtPriceMantissa(address(thisPool));
+            uint price = oracle.getDebtPriceMantissa(thisPool.asset());
             uint debtUsd = debt * price / MANTISSA;
             liabilitiesUsd += debtUsd;
         }
@@ -604,7 +615,7 @@ contract Core {
             ICollateral thisCollateral = userCollaterals[borrower][i];
             uint capUsd = getCapUsd(thisCollateral);
             uint price = oracle.getCollateralPriceMantissa(
-                address(thisCollateral),
+                thisCollateral.asset(),
                 getCollateralFactor(thisCollateral),
                 thisCollateral.totalAssets(),
                 capUsd
