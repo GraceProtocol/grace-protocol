@@ -30,11 +30,16 @@ contract RateProvider {
     function setInterestRateModel(address pool, address model) external onlyOwner { interestRateModels[pool] = model; }
     function setCollateralFeeModel(address collateral, address model) external onlyOwner { collateralFeeModels[collateral] = model; }
 
-    function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+    function getCollateralFeeModelOf(address collateral) public view returns (address) {
         address model = collateralFeeModels[collateral];
         if(model == address(0)) {
             model = defaultCollateralFeeModel;
         }
+        return model;
+    }
+
+    function getCollateralFeeModelFeeBps(address collateral, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        address model = getCollateralFeeModelOf(collateral);
         if(model == address(0)) {
             return 0;
         }
@@ -45,11 +50,16 @@ contract RateProvider {
         return rate;
     }
 
-    function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+    function getInterestRateModelOf(address pool) public view returns (address) {
         address model = interestRateModels[pool];
         if(model == address(0)) {
             model = defaultInterestRateModel;
         }
+        return model;
+    }
+
+    function getInterestRateModelBorrowRate(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256) {
+        address model = getInterestRateModelOf(pool);
         if(model == address(0)) {
             return 0;
         }
