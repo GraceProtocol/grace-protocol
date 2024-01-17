@@ -310,7 +310,7 @@ contract Core {
         // enforce both caps
         uint totalCollateralAfter = collateral.totalAssets() + amount;
         uint totalValueAfter = totalCollateralAfter * price / MANTISSA;
-        require(totalValueAfter <= capUsd, "capExceeded");
+        require(totalValueAfter < capUsd, "capExceeded");
         if(collateralUsers[collateral][recipient] == false) {
             collateralUsers[collateral][recipient] = true;
             userCollaterals[recipient].push(collateral);
