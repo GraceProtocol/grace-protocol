@@ -284,7 +284,7 @@ contract Core {
         for (uint i = 0; i < borrowerPools[caller].length; i++) {
             IPool pool = borrowerPools[caller][i];
             uint debt = pool.getDebtOf(caller);
-            uint price = oracle.getDebtPriceMantissa(address(pool));
+            uint price = oracle.getDebtPriceMantissa(pool.asset());
             uint debtUsd = debt * price / MANTISSA;
             liabilitiesUsd += debtUsd;
         }
