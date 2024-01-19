@@ -92,6 +92,10 @@ contract Pool {
         _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - _lastAccrued;
         if(timeElapsed == 0) return _lastAccrued;
+        if(lastBorrowRate == 0) {
+            lastAccrued = block.timestamp;
+            return _lastAccrued;
+        }
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = convertToShares(interest);
         if(shares == 0) return _lastAccrued;

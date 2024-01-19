@@ -303,7 +303,7 @@ contract Core {
                     thisCollateral.totalAssets(),
                     capUsd
                 );
-                uint thisCollateralBalance = collateral.getCollateralOf(caller);
+                uint thisCollateralBalance = thisCollateral.getCollateralOf(caller);
                 if(thisCollateral == collateral) thisCollateralBalance -= amount;
                 uint thisCollateralUsd = thisCollateralBalance * collateralFactorBps * price / 10000 / MANTISSA;
                 assetsUsd += thisCollateralUsd;
