@@ -57,15 +57,7 @@ contract Oracle {
     function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
-            // get normalized price, then cap it
-            uint normalizedPrice = getCappedPrice(
-                getNormalizedPrice(
-                    token,
-                    feed
-                ),
-                totalCollateral,
-                capUsd
-            );
+            uint normalizedPrice = getNormalizedPrice(token, feed);
             // potentially store price as this week's low
             uint week = block.timestamp / WEEK;
             uint weekLow = weeklyLows[msg.sender][token][week];
@@ -86,7 +78,7 @@ contract Oracle {
                 uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
                 return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
             }
-            return normalizedPrice;
+            return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
         }
         return 0;
     }
@@ -118,15 +110,7 @@ contract Oracle {
     function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
-            // get normalized price, then cap it
-            uint normalizedPrice = getCappedPrice(
-                getNormalizedPrice(
-                    token,
-                    feed
-                ),
-                totalCollateral,
-                capUsd
-            );
+            uint normalizedPrice = getNormalizedPrice(token, feed);
             uint week = block.timestamp / WEEK;
             uint weekLow = weeklyLows[caller][token][week];
             if(weekLow == 0 || normalizedPrice < weekLow) {
@@ -143,7 +127,7 @@ contract Oracle {
                 uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
                 return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
             }
-            return normalizedPrice;
+            return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
         }
         return 0;
 

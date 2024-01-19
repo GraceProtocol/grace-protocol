@@ -14,6 +14,7 @@ import {Oracle} from "src/Oracle.sol";
 import {RateProvider} from "src/RateProvider.sol";
 import {BorrowController} from "src/BorrowController.sol";
 import {ERC20} from "test/mocks/ERC20.sol";
+import {Lens} from "src/Lens.sol";
 
 interface IERC20Metadata {
     function symbol() external view returns (string memory);
@@ -39,6 +40,7 @@ contract SepoliaDeployerScript is Script {
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
         RateModel rateModel = new RateModel(9000, 3 days, 0, 2000, 10000);
+        new Lens();
         // WETH address used on Arbitrum Sepolia
         address weth = 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73;
 
