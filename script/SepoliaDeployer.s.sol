@@ -96,13 +96,13 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy WETH collateral
         */
-        deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
+        deployCollateral(core, weth, ethFeed, 8000, 10000 * 1e18);
 
         /*
             Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
-        deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18, 2000);
+        deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
 
 
         vm.stopBroadcast();
@@ -138,10 +138,9 @@ contract SepoliaDeployerScript is Script {
         address underlying,
         address feed,
         uint collateralFactorBps,
-        uint hardCapUsd,
-        uint softCapBps) public returns (address) {
+        uint hardCapUsd) public returns (address) {
         Oracle oracle = Oracle(address(core.oracle()));
         oracle.setCollateralFeed(underlying, feed);
-        return core.deployCollateral(underlying, collateralFactorBps, hardCapUsd, softCapBps);
+        return core.deployCollateral(underlying, collateralFactorBps, hardCapUsd);
     }
 }

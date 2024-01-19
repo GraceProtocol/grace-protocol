@@ -5,8 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IPoolCore {
     function feeDestination() external view returns (address);
-    function onPoolDeposit(uint256 amount) external returns (bool);
-    function onPoolWithdraw(uint256 amount) external returns (bool);
+    function onPoolDeposit(uint256 amount) external view returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
@@ -272,7 +271,6 @@ contract Pool {
         address owner
     ) public lock returns (uint256 shares) {
         uint _lastAccrued = accrueInterest();
-        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -307,7 +305,6 @@ contract Pool {
         uint _lastAccrued = accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
-        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 

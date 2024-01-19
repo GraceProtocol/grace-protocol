@@ -2,7 +2,6 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./EMA.sol";
 
 interface IPoolDeployer {
     function deployPool(string memory name, string memory symbol, address underlying, bool isWETH) external returns (address pool);
@@ -48,16 +47,12 @@ interface ICollateral {
 contract Core {
 
     using SafeERC20 for IERC20;
-    using EMA for EMA.EMAState;
 
     struct CollateralConfig {
         bool enabled;
         uint collateralFactorBps;
         uint hardCap;
-        uint softCapBps;
         // cap variables
-        uint lastSoftCapUpdate;
-        uint prevSoftCap;
         uint lastHardCapUpdate;
         uint prevHardCap;
         // collateral factor variables
@@ -68,7 +63,6 @@ contract Core {
     struct PoolConfig {
         bool enabled;
         uint depositCap;
-        EMA.EMAState supplyEMA;
     }
 
     IPoolDeployer public poolDeployer;
@@ -78,7 +72,6 @@ contract Core {
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
     uint public writeOffIncentiveBps = 1000; // 10%
-    uint public supplyEMASum;
     uint256 public lockDepth;
     address public owner;
     IOracle public oracle;
@@ -86,9 +79,6 @@ contract Core {
     IRateProvider public rateProvider;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
-    uint public dailyBorrowLimitUsd = 100000e18; // $100,000
-    uint public dailyBorrowLimitLastUpdate;
-    uint public lastDailyBorrowLimitRemainingUsd = 100000e18; // $100,000
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
     mapping (ICollateral => mapping (address => bool)) public collateralUsers;
@@ -173,12 +163,9 @@ contract Core {
         require(size > 0, "invalidUnderlying");
         bool isWETH = underlying == WETH;
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying, isWETH));
-        EMA.EMAState memory emaState;
-        emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({
             enabled: true,
-            depositCap: depositCap,
-            supplyEMA: emaState
+            depositCap: depositCap
         });
         poolList.push(pool);
         poolCount++;
@@ -193,11 +180,9 @@ contract Core {
     function deployCollateral(
         address underlying,
         uint collateralFactor,
-        uint hardCapUsd,
-        uint softCapBps
+        uint hardCapUsd
     ) public onlyOwner returns (address) {
         require(collateralFactor < 10000, "collateralFactorTooHigh");
-        require(softCapBps <= 10000, "softCapTooHigh");
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
@@ -207,12 +192,9 @@ contract Core {
             enabled: true,
             collateralFactorBps: collateralFactor,
             hardCap: hardCapUsd,
-            softCapBps: softCapBps,
-            lastSoftCapUpdate: block.timestamp,
-            prevSoftCap: 0,
-            lastHardCapUpdate: block.timestamp,
+            lastHardCapUpdate: 0,
             prevHardCap: 0,
-            lastCollateralFactorUpdate: block.timestamp,
+            lastCollateralFactorUpdate: 0,
             prevCollateralFactor: 0
         });
         collateralList.push(collateral);
@@ -230,32 +212,12 @@ contract Core {
 
     function setCollateralHardCap(ICollateral collateral, uint hardCapUsd) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        collateralsData[collateral].prevHardCap = getHardCapUsd(collateral);
+        collateralsData[collateral].prevHardCap = getCapUsd(collateral);
         collateralsData[collateral].hardCap = hardCapUsd;
         collateralsData[collateral].lastHardCapUpdate = block.timestamp;
     }
 
-    function setCollateralSoftCap(ICollateral collateral, uint softCapBps) public onlyOwner {
-        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        require(softCapBps <= 10000, "softCapTooHigh");
-        collateralsData[collateral].prevSoftCap = getSoftCapUsd(collateral);
-        collateralsData[collateral].softCapBps = softCapBps;
-        collateralsData[collateral].lastSoftCapUpdate = block.timestamp;
-    }
-
-    function getSoftCapUsd(ICollateral collateral) public view returns (uint) {
-        uint softCapBps = collateralsData[collateral].softCapBps;
-        uint softCapTimeElapsed = block.timestamp - collateralsData[collateral].lastSoftCapUpdate;
-        if(softCapTimeElapsed < 7 days) { // else use current soft cap
-            uint prevSoftCap = collateralsData[collateral].prevSoftCap;
-            uint currentWeight = softCapTimeElapsed;
-            uint prevWeight = 7 days - currentWeight;
-            softCapBps = (prevSoftCap * prevWeight + softCapBps * currentWeight) / 7 days;
-        }
-        return supplyEMASum * softCapBps / 10000;
-    }
-
-    function getHardCapUsd(ICollateral collateral) public view returns (uint) {
+    function getCapUsd(ICollateral collateral) public view returns (uint) {
         uint hardCap = collateralsData[collateral].hardCap;
         uint hardCapTimeElapsed = block.timestamp - collateralsData[collateral].lastHardCapUpdate;
         if(hardCapTimeElapsed < 7 days) { // else use current hard cap
@@ -277,12 +239,6 @@ contract Core {
             collateralFactorBps = (prevCollateralFactor * prevWeight + collateralFactorBps * currentWeight) / 7 days;
         }
         return collateralFactorBps;
-    }
-
-    function getCapUsd(ICollateral collateral) public view returns (uint) {
-        uint softCap = getSoftCapUsd(collateral);
-        uint hardCap = getHardCapUsd(collateral);
-        return hardCap < softCap ? hardCap : softCap;
     }
 
     function viewCollateralPriceMantissa(ICollateral collateral) external view returns (uint256) {
@@ -391,32 +347,12 @@ contract Core {
         }
     }
 
-    function onPoolDeposit(uint256 amount) external returns (bool) {
+    function onPoolDeposit(uint256 amount) external view returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         uint totalAssets = pool.totalAssets();
         require(totalAssets + amount <= poolsData[pool].depositCap, "depositCapExceeded");
-        updateTotalSuppliedValue(pool, totalAssets + amount);
         return true;
-    }
-
-    function onPoolWithdraw(uint256 amount) external returns (bool) {
-        IPool pool = IPool(msg.sender);
-        require(poolsData[pool].enabled, "notPool");
-        uint totalAssets = pool.totalAssets();
-        totalAssets = totalAssets > amount ? totalAssets - amount : 0;
-        updateTotalSuppliedValue(pool, totalAssets);
-        return true;
-    }
-
-    function updateTotalSuppliedValue(IPool pool, uint totalAssets) internal {
-        uint price = oracle.getDebtPriceMantissa(pool.asset());
-        uint totalValueUsd = totalAssets * price / MANTISSA;
-        EMA.EMAState memory supplyEMA = poolsData[pool].supplyEMA;
-        uint prevEMA = supplyEMA.ema;
-        supplyEMA = supplyEMA.update(totalValueUsd, 7 days);
-        poolsData[pool].supplyEMA = supplyEMA;
-        supplyEMASum = supplyEMASum - prevEMA + supplyEMA.ema;
     }
 
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
@@ -631,10 +567,7 @@ contract Core {
         // write off
         for (uint i = 0; i < borrowerPools[borrower].length; i++) {
             IPool thisPool = borrowerPools[borrower][i];
-            uint totalAssets = thisPool.totalAssets(); // to use previous pool lastBalance
-            uint debt = thisPool.getDebtOf(borrower);
             thisPool.writeOff(borrower);
-            updateTotalSuppliedValue(thisPool, totalAssets - debt);
             poolBorrowers[thisPool][borrower] = false;
         }
         delete borrowerPools[borrower];
