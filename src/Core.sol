@@ -51,10 +51,10 @@ contract Core {
     struct CollateralConfig {
         bool enabled;
         uint collateralFactorBps;
-        uint hardCap;
+        uint capUsd;
         // cap variables
-        uint lastHardCapUpdate;
-        uint prevHardCap;
+        uint lastCapUsdUpdate;
+        uint prevCapUsd;
         // collateral factor variables
         uint lastCollateralFactorUpdate;
         uint prevCollateralFactor;
@@ -180,7 +180,7 @@ contract Core {
     function deployCollateral(
         address underlying,
         uint collateralFactor,
-        uint hardCapUsd
+        uint capUsd
     ) public onlyOwner returns (address) {
         require(collateralFactor < 10000, "collateralFactorTooHigh");
         uint size;
@@ -191,9 +191,9 @@ contract Core {
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
-            hardCap: hardCapUsd,
-            lastHardCapUpdate: 0,
-            prevHardCap: 0,
+            capUsd: capUsd,
+            lastCapUsdUpdate: 0,
+            prevCapUsd: 0,
             lastCollateralFactorUpdate: 0,
             prevCollateralFactor: 0
         });
@@ -210,23 +210,23 @@ contract Core {
         collateralsData[collateral].collateralFactorBps = collateralFactor;
     }
 
-    function setCollateralHardCap(ICollateral collateral, uint hardCapUsd) public onlyOwner {
+    function setCollateralCapUsd(ICollateral collateral, uint capUsd) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        collateralsData[collateral].prevHardCap = getCapUsd(collateral);
-        collateralsData[collateral].hardCap = hardCapUsd;
-        collateralsData[collateral].lastHardCapUpdate = block.timestamp;
+        collateralsData[collateral].prevCapUsd = getCapUsd(collateral);
+        collateralsData[collateral].capUsd = capUsd;
+        collateralsData[collateral].lastCapUsdUpdate = block.timestamp;
     }
 
     function getCapUsd(ICollateral collateral) public view returns (uint) {
-        uint hardCap = collateralsData[collateral].hardCap;
-        uint hardCapTimeElapsed = block.timestamp - collateralsData[collateral].lastHardCapUpdate;
-        if(hardCapTimeElapsed < 7 days) { // else use current hard cap
-            uint prevHardCap = collateralsData[collateral].prevHardCap;
-            uint currentWeight = hardCapTimeElapsed;
+        uint capUsd = collateralsData[collateral].capUsd;
+        uint capUsdTimeElapsed = block.timestamp - collateralsData[collateral].lastCapUsdUpdate;
+        if(capUsdTimeElapsed < 7 days) { // else use current cap
+            uint prevCapUsd = collateralsData[collateral].prevCapUsd;
+            uint currentWeight = capUsdTimeElapsed;
             uint prevWeight = 7 days - currentWeight;
-            hardCap = (prevHardCap * prevWeight + hardCap * currentWeight) / 7 days;
+            capUsd = (prevCapUsd * prevWeight + capUsd * currentWeight) / 7 days;
         }
-        return hardCap;
+        return capUsd;
     }
 
     function getCollateralFactor(ICollateral collateral) public view returns (uint) {
