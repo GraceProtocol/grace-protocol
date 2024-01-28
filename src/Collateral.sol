@@ -21,6 +21,13 @@ contract Collateral {
 
     using SafeERC20 for IERC20;
 
+    struct SeizeEvent {
+        uint timestamp;
+        address account;
+        uint256 assets;
+        address to;
+    }
+
     IERC20 public immutable asset;
     bool public isWETH;
     ICollateralCore public immutable core;
@@ -36,6 +43,7 @@ contract Collateral {
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
+    SeizeEvent[] public seizeEvents;
 
     constructor(IERC20 _asset, bool _isWETH, address _core) {
         asset = _asset;
@@ -343,6 +351,10 @@ contract Collateral {
         return convertToAssets(balanceOf[account]);
     }
 
+    function seizeEventsCount() public view returns (uint256) {
+        return seizeEvents.length;
+    }
+
     function seize(address account, uint256 assets, address to) public lock {
         uint _lastAccrued = accrueFee();
         require(msg.sender == address(core), "onlyCore");
@@ -353,6 +365,7 @@ contract Collateral {
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, to, account, shares, assets);
+        seizeEvents.push(SeizeEvent(block.timestamp, account, assets, to));
         updateFee(_lastAccrued);
     }
 

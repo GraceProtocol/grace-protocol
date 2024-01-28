@@ -23,6 +23,12 @@ contract Pool {
 
     using SafeERC20 for IERC20;
 
+    struct WriteOffEvent {
+        uint timestamp;
+        address account;
+        uint debt;
+    }
+
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
@@ -45,6 +51,7 @@ contract Pool {
     mapping (address => mapping (address => uint)) public borrowAllowance;
     mapping(address => uint) public debtSharesOf;
     mapping(address => uint) public nonces;
+    WriteOffEvent[] public writeOffEvents;
 
     constructor(
         string memory _name,
@@ -452,6 +459,10 @@ contract Pool {
         repayETH(msg.sender);
     }
 
+    function writeOffEventsCount() public view returns (uint) {
+        return writeOffEvents.length;
+    }
+
     function writeOff(address account) public lock {
         uint _lastAccrued = accrueInterest();
         require(msg.sender == address(core), "onlyCore");
@@ -460,6 +471,7 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
+        writeOffEvents.push(WriteOffEvent(block.timestamp, account, debt));
         updateBorrowRate(_lastAccrued);
     }
 
