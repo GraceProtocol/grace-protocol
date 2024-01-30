@@ -97,13 +97,13 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy WETH collateral
         */
-        deployCollateral(core, weth, ethFeed, 8000, 10000 * 1e18);
+        deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18);
 
         /*
             Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
-        deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
+        deployCollateral(core, Dai, daiFeed, 8000, 1000 * 1e18);
 
 
         vm.stopBroadcast();
@@ -126,7 +126,7 @@ contract SepoliaDeployerScript is Script {
         }
         pool = core.deployPool(name, symbol, asset, depositCap);
         if(address(vaultFactory) != address(0)) {
-            uint initialBudget = 1000 * 1e18;
+            uint initialBudget = 1000000 * 1e18;
             vault = vaultFactory.createVault(
                 pool,
                 initialBudget
