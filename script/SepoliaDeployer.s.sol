@@ -73,6 +73,7 @@ contract SepoliaDeployerScript is Script {
         Reserve reserve = new Reserve(address(gtr));
         // Set reserve as fee destination
         core.setFeeDestination(address(reserve));
+        gtr.setDestinationWhitelist(address(reserve), true);
 
         /*
             Deploy VaultFactory
