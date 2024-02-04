@@ -2,7 +2,6 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./EMA.sol";
 
 interface IPoolDeployer {
     function deployPool(string memory name, string memory symbol, address underlying, bool isWETH) external returns (address pool);
@@ -48,18 +47,14 @@ interface ICollateral {
 contract Core {
 
     using SafeERC20 for IERC20;
-    using EMA for EMA.EMAState;
 
     struct CollateralConfig {
         bool enabled;
         uint collateralFactorBps;
-        uint hardCap;
-        uint softCapBps;
+        uint capUsd;
         // cap variables
-        uint lastSoftCapUpdate;
-        uint prevSoftCap;
-        uint lastHardCapUpdate;
-        uint prevHardCap;
+        uint lastCapUsdUpdate;
+        uint prevCapUsd;
         // collateral factor variables
         uint lastCollateralFactorUpdate;
         uint prevCollateralFactor;
@@ -68,7 +63,16 @@ contract Core {
     struct PoolConfig {
         bool enabled;
         uint depositCap;
-        EMA.EMAState supplyEMA;
+    }
+
+    struct LiquidationEvent {
+        uint timestamp;
+        address borrower;
+        address liquidator;
+        address pool;
+        address collateral;
+        uint debtAmount;
+        uint collateralReward;
     }
 
     IPoolDeployer public poolDeployer;
@@ -78,7 +82,6 @@ contract Core {
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
     uint public writeOffIncentiveBps = 1000; // 10%
-    uint public supplyEMASum;
     uint256 public lockDepth;
     address public owner;
     IOracle public oracle;
@@ -86,21 +89,15 @@ contract Core {
     IRateProvider public rateProvider;
     address public feeDestination = address(this);
     uint constant MANTISSA = 1e18;
-    uint public dailyBorrowLimitUsd = 100000e18; // $100,000
-    uint public dailyBorrowLimitLastUpdate;
-    uint public lastDailyBorrowLimitRemainingUsd = 100000e18; // $100,000
     mapping (ICollateral => CollateralConfig) public collateralsData;
     mapping (IPool => PoolConfig) public poolsData;
     mapping (ICollateral => mapping (address => bool)) public collateralUsers;
     mapping (IPool => mapping (address => bool)) public poolBorrowers;
     mapping (address => ICollateral[]) public userCollaterals;
-    mapping (address => uint) public userCollateralsCount;
     mapping (address => IPool[]) public borrowerPools;
-    mapping (address => uint) public borrowerPoolsCount;
     IPool[] public poolList;
-    uint public poolCount;
     ICollateral[] public collateralList;
-    uint public collateralCount;
+    LiquidationEvent[] public liquidationEvents;
 
     constructor(
         address _rateProvider,
@@ -173,15 +170,11 @@ contract Core {
         require(size > 0, "invalidUnderlying");
         bool isWETH = underlying == WETH;
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying, isWETH));
-        EMA.EMAState memory emaState;
-        emaState.lastUpdate = block.timestamp;
         poolsData[pool] = PoolConfig({
             enabled: true,
-            depositCap: depositCap,
-            supplyEMA: emaState
+            depositCap: depositCap
         });
         poolList.push(pool);
-        poolCount++;
         return address(pool);
     }
 
@@ -193,11 +186,9 @@ contract Core {
     function deployCollateral(
         address underlying,
         uint collateralFactor,
-        uint hardCapUsd,
-        uint softCapBps
+        uint capUsd
     ) public onlyOwner returns (address) {
         require(collateralFactor < 10000, "collateralFactorTooHigh");
-        require(softCapBps <= 10000, "softCapTooHigh");
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
@@ -206,17 +197,13 @@ contract Core {
         collateralsData[collateral] = CollateralConfig({
             enabled: true,
             collateralFactorBps: collateralFactor,
-            hardCap: hardCapUsd,
-            softCapBps: softCapBps,
-            lastSoftCapUpdate: block.timestamp,
-            prevSoftCap: 0,
-            lastHardCapUpdate: block.timestamp,
-            prevHardCap: 0,
-            lastCollateralFactorUpdate: block.timestamp,
+            capUsd: capUsd,
+            lastCapUsdUpdate: 0,
+            prevCapUsd: 0,
+            lastCollateralFactorUpdate: 0,
             prevCollateralFactor: 0
         });
         collateralList.push(collateral);
-        collateralCount++;
         return address(collateral);
     }
 
@@ -228,43 +215,23 @@ contract Core {
         collateralsData[collateral].collateralFactorBps = collateralFactor;
     }
 
-    function setCollateralHardCap(ICollateral collateral, uint hardCapUsd) public onlyOwner {
+    function setCollateralCapUsd(ICollateral collateral, uint capUsd) public onlyOwner {
         require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        collateralsData[collateral].prevHardCap = getHardCapUsd(collateral);
-        collateralsData[collateral].hardCap = hardCapUsd;
-        collateralsData[collateral].lastHardCapUpdate = block.timestamp;
+        collateralsData[collateral].prevCapUsd = getCapUsd(collateral);
+        collateralsData[collateral].capUsd = capUsd;
+        collateralsData[collateral].lastCapUsdUpdate = block.timestamp;
     }
 
-    function setCollateralSoftCap(ICollateral collateral, uint softCapBps) public onlyOwner {
-        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
-        require(softCapBps <= 10000, "softCapTooHigh");
-        collateralsData[collateral].prevSoftCap = getSoftCapUsd(collateral);
-        collateralsData[collateral].softCapBps = softCapBps;
-        collateralsData[collateral].lastSoftCapUpdate = block.timestamp;
-    }
-
-    function getSoftCapUsd(ICollateral collateral) public view returns (uint) {
-        uint softCapBps = collateralsData[collateral].softCapBps;
-        uint softCapTimeElapsed = block.timestamp - collateralsData[collateral].lastSoftCapUpdate;
-        if(softCapTimeElapsed < 7 days) { // else use current soft cap
-            uint prevSoftCap = collateralsData[collateral].prevSoftCap;
-            uint currentWeight = softCapTimeElapsed;
+    function getCapUsd(ICollateral collateral) public view returns (uint) {
+        uint capUsd = collateralsData[collateral].capUsd;
+        uint capUsdTimeElapsed = block.timestamp - collateralsData[collateral].lastCapUsdUpdate;
+        if(capUsdTimeElapsed < 7 days) { // else use current cap
+            uint prevCapUsd = collateralsData[collateral].prevCapUsd;
+            uint currentWeight = capUsdTimeElapsed;
             uint prevWeight = 7 days - currentWeight;
-            softCapBps = (prevSoftCap * prevWeight + softCapBps * currentWeight) / 7 days;
+            capUsd = (prevCapUsd * prevWeight + capUsd * currentWeight) / 7 days;
         }
-        return supplyEMASum * softCapBps / 10000;
-    }
-
-    function getHardCapUsd(ICollateral collateral) public view returns (uint) {
-        uint hardCap = collateralsData[collateral].hardCap;
-        uint hardCapTimeElapsed = block.timestamp - collateralsData[collateral].lastHardCapUpdate;
-        if(hardCapTimeElapsed < 7 days) { // else use current hard cap
-            uint prevHardCap = collateralsData[collateral].prevHardCap;
-            uint currentWeight = hardCapTimeElapsed;
-            uint prevWeight = 7 days - currentWeight;
-            hardCap = (prevHardCap * prevWeight + hardCap * currentWeight) / 7 days;
-        }
-        return hardCap;
+        return capUsd;
     }
 
     function getCollateralFactor(ICollateral collateral) public view returns (uint) {
@@ -277,12 +244,6 @@ contract Core {
             collateralFactorBps = (prevCollateralFactor * prevWeight + collateralFactorBps * currentWeight) / 7 days;
         }
         return collateralFactorBps;
-    }
-
-    function getCapUsd(ICollateral collateral) public view returns (uint) {
-        uint softCap = getSoftCapUsd(collateral);
-        uint hardCap = getHardCapUsd(collateral);
-        return hardCap < softCap ? hardCap : softCap;
     }
 
     function viewCollateralPriceMantissa(ICollateral collateral) external view returns (uint256) {
@@ -314,7 +275,6 @@ contract Core {
         if(collateralUsers[collateral][recipient] == false) {
             collateralUsers[collateral][recipient] = true;
             userCollaterals[recipient].push(collateral);
-            userCollateralsCount[recipient]++;
         }
         return true;
     }
@@ -328,7 +288,7 @@ contract Core {
         for (uint i = 0; i < borrowerPools[caller].length; i++) {
             IPool pool = borrowerPools[caller][i];
             uint debt = pool.getDebtOf(caller);
-            uint price = oracle.getDebtPriceMantissa(address(pool));
+            uint price = oracle.getDebtPriceMantissa(pool.asset());
             uint debtUsd = debt * price / MANTISSA;
             liabilitiesUsd += debtUsd;
         }
@@ -347,7 +307,7 @@ contract Core {
                     thisCollateral.totalAssets(),
                     capUsd
                 );
-                uint thisCollateralBalance = collateral.getCollateralOf(caller);
+                uint thisCollateralBalance = thisCollateral.getCollateralOf(caller);
                 if(thisCollateral == collateral) thisCollateralBalance -= amount;
                 uint thisCollateralUsd = thisCollateralBalance * collateralFactorBps * price / 10000 / MANTISSA;
                 assetsUsd += thisCollateralUsd;
@@ -363,7 +323,6 @@ contract Core {
                 if(userCollaterals[caller][i] == collateral) {
                     userCollaterals[caller][i] = userCollaterals[caller][userCollaterals[caller].length - 1];
                     userCollaterals[caller].pop();
-                    userCollateralsCount[caller]--;
                     break;
                 }
             }
@@ -391,32 +350,12 @@ contract Core {
         }
     }
 
-    function onPoolDeposit(uint256 amount) external returns (bool) {
+    function onPoolDeposit(uint256 amount) external view returns (bool) {
         IPool pool = IPool(msg.sender);
         require(poolsData[pool].enabled, "notPool");
         uint totalAssets = pool.totalAssets();
         require(totalAssets + amount <= poolsData[pool].depositCap, "depositCapExceeded");
-        updateTotalSuppliedValue(pool, totalAssets + amount);
         return true;
-    }
-
-    function onPoolWithdraw(uint256 amount) external returns (bool) {
-        IPool pool = IPool(msg.sender);
-        require(poolsData[pool].enabled, "notPool");
-        uint totalAssets = pool.totalAssets();
-        totalAssets = totalAssets > amount ? totalAssets - amount : 0;
-        updateTotalSuppliedValue(pool, totalAssets);
-        return true;
-    }
-
-    function updateTotalSuppliedValue(IPool pool, uint totalAssets) internal {
-        uint price = oracle.getDebtPriceMantissa(pool.asset());
-        uint totalValueUsd = totalAssets * price / MANTISSA;
-        EMA.EMAState memory supplyEMA = poolsData[pool].supplyEMA;
-        uint prevEMA = supplyEMA.ema;
-        supplyEMA = supplyEMA.update(totalValueUsd, 7 days);
-        poolsData[pool].supplyEMA = supplyEMA;
-        supplyEMASum = supplyEMASum - prevEMA + supplyEMA.ema;
     }
 
     function onPoolBorrow(address caller, uint256 amount) external returns (bool) {
@@ -426,7 +365,6 @@ contract Core {
         if(poolBorrowers[pool][caller] == false) {
             poolBorrowers[pool][caller] = true;
             borrowerPools[caller].push(pool);
-            borrowerPoolsCount[caller]++;
         }
 
         // calculate assets
@@ -480,7 +418,6 @@ contract Core {
                 if(borrowerPools[recipient][i] == pool) {
                     borrowerPools[recipient][i] = borrowerPools[recipient][borrowerPools[recipient].length - 1];
                     borrowerPools[recipient].pop();
-                    borrowerPoolsCount[recipient]--;
                     break;
                 }
             }
@@ -500,6 +437,26 @@ contract Core {
         } catch {
             return 0;
         }
+    }
+
+    function poolCount() external view returns (uint) {
+        return poolList.length;
+    }
+
+    function collateralCount() external view returns (uint) {
+        return collateralList.length;
+    }
+
+    function liquidationEventsCount() external view returns (uint) {
+        return liquidationEvents.length;
+    }
+
+    function userCollateralsCount(address user) external view returns (uint) {
+        return userCollaterals[user].length;
+    }
+
+    function borrowerPoolsCount(address user) external view returns (uint) {
+        return borrowerPools[user].length;
     }
 
     function liquidate(address borrower, IPool pool, ICollateral collateral, uint debtAmount) lock external {
@@ -580,6 +537,15 @@ contract Core {
             debtToken.forceApprove(address(pool), debtAmount);
             pool.repay(borrower, debtAmount);
             collateral.seize(borrower, collateralReward, msg.sender);
+            liquidationEvents.push(LiquidationEvent({
+                timestamp: block.timestamp,
+                borrower: borrower,
+                liquidator: msg.sender,
+                pool: address(pool),
+                collateral: address(collateral),
+                debtAmount: debtAmount,
+                collateralReward: collateralReward
+            }));
         }
 
         if(collateral.getCollateralOf(borrower) == 0) {
@@ -588,7 +554,6 @@ contract Core {
                 if(userCollaterals[borrower][i] == collateral) {
                     userCollaterals[borrower][i] = userCollaterals[borrower][userCollaterals[borrower].length - 1];
                     userCollaterals[borrower].pop();
-                    userCollateralsCount[borrower]--;
                     break;
                 }
             }
@@ -631,14 +596,10 @@ contract Core {
         // write off
         for (uint i = 0; i < borrowerPools[borrower].length; i++) {
             IPool thisPool = borrowerPools[borrower][i];
-            uint totalAssets = thisPool.totalAssets(); // to use previous pool lastBalance
-            uint debt = thisPool.getDebtOf(borrower);
             thisPool.writeOff(borrower);
-            updateTotalSuppliedValue(thisPool, totalAssets - debt);
             poolBorrowers[thisPool][borrower] = false;
         }
         delete borrowerPools[borrower];
-        borrowerPoolsCount[borrower] = 0;
 
         // seize
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
@@ -651,7 +612,6 @@ contract Core {
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];
-        userCollateralsCount[borrower] = 0;
     }
 
     function pullFromCore(IERC20 token, address dst, uint amount) public onlyOwner {

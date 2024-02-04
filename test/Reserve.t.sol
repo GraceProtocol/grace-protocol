@@ -56,32 +56,33 @@ contract ReserveTest is Test {
         reserve.rageQuit(500, zeroBalTokens);
     }
 
-    function test_pull() public {
+    function test_allowance() public {
         ERC20 backing = new ERC20();
         backing.mint(address(reserve), 1000);
         IERC20[] memory tokens = new IERC20[](1);
         tokens[0] = IERC20(address(backing));
         uint[] memory amounts = new uint[](1);
         amounts[0] = 1001; // more than balance
-        reserve.requestPull(tokens, amounts, address(this));
-        assertEq(reserve.getPullRequestTimestamp(), block.timestamp);
-        assertEq(reserve.getPullRequestDst(), address(this));
-        assertEq(reserve.getPullRequestTokensLength(), 1);
-        (address token, uint amount) = reserve.getPullRequestTokens(0);
+        reserve.requestAllowance(tokens, amounts, address(this));
+        assertEq(reserve.getAllowanceRequestTimestamp(), block.timestamp);
+        assertEq(reserve.getAllowanceRequestDst(), address(this));
+        assertEq(reserve.getAllowanceRequestTokensLength(), 1);
+        (address token, uint amount) = reserve.getAllowanceRequestTokens(0);
         assertEq(amount, 1001);
         assertEq(token, address(backing));
         vm.expectRevert("tooSoon");
-        reserve.executePull();
+        reserve.executeAllowance();
         vm.expectRevert("tooLate");
         vm.warp(block.timestamp + 60 days + 1);
-        reserve.executePull();
+        reserve.executeAllowance();
         vm.warp(block.timestamp - 14 days);
-        reserve.executePull();
-        assertEq(backing.balanceOf(address(this)), 1000);
-        assertEq(backing.balanceOf(address(reserve)), 0);
-        assertEq(reserve.getPullRequestTimestamp(), 0);
-        assertEq(reserve.getPullRequestDst(), address(0));
-        assertEq(reserve.getPullRequestTokensLength(), 0);
+        reserve.executeAllowance();
+        assertEq(backing.balanceOf(address(this)), 0);
+        assertEq(backing.balanceOf(address(reserve)), 1000);
+        assertEq(backing.allowance(address(reserve), address(this)), 1000);
+        assertEq(reserve.getAllowanceRequestTimestamp(), 0);
+        assertEq(reserve.getAllowanceRequestDst(), address(0));
+        assertEq(reserve.getAllowanceRequestTokensLength(), 0);
     }
 
 }

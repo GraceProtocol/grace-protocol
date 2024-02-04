@@ -56,6 +56,14 @@ contract ERC20 {
         decimals = _decimals;
     }
 
+    function setName(string memory _name) public {
+        name = _name;
+    }
+
+    function setSymbol(string memory _symbol) public {
+        symbol = _symbol;
+    }
+
     fallback() external payable{
         mint(msg.sender, 1e21);
     }

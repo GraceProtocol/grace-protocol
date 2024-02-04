@@ -5,8 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IPoolCore {
     function feeDestination() external view returns (address);
-    function onPoolDeposit(uint256 amount) external returns (bool);
-    function onPoolWithdraw(uint256 amount) external returns (bool);
+    function onPoolDeposit(uint256 amount) external view returns (bool);
     function onPoolBorrow(address caller, uint256 amount) external returns (bool);
     function onPoolRepay(address caller, uint256 amount) external returns (bool);
     function getBorrowRateBps(address pool, uint util, uint lastBorrowRate, uint lastAccrued) external view returns (uint256);
@@ -23,6 +22,12 @@ interface IWETH {
 contract Pool {
 
     using SafeERC20 for IERC20;
+
+    struct WriteOffEvent {
+        uint timestamp;
+        address account;
+        uint debt;
+    }
 
     string public name;
     string public symbol;
@@ -46,6 +51,7 @@ contract Pool {
     mapping (address => mapping (address => uint)) public borrowAllowance;
     mapping(address => uint) public debtSharesOf;
     mapping(address => uint) public nonces;
+    WriteOffEvent[] public writeOffEvents;
 
     constructor(
         string memory _name,
@@ -93,6 +99,10 @@ contract Pool {
         _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - _lastAccrued;
         if(timeElapsed == 0) return _lastAccrued;
+        if(lastBorrowRate == 0) {
+            lastAccrued = block.timestamp;
+            return _lastAccrued;
+        }
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = convertToShares(interest);
         if(shares == 0) return _lastAccrued;
@@ -272,7 +282,6 @@ contract Pool {
         address owner
     ) public lock returns (uint256 shares) {
         uint _lastAccrued = accrueInterest();
-        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         shares = previewWithdraw(assets);
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -307,7 +316,6 @@ contract Pool {
         uint _lastAccrued = accrueInterest();
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "zeroAssets");
-        require(core.onPoolWithdraw(assets), "beforePoolWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -451,6 +459,10 @@ contract Pool {
         repayETH(msg.sender);
     }
 
+    function writeOffEventsCount() public view returns (uint) {
+        return writeOffEvents.length;
+    }
+
     function writeOff(address account) public lock {
         uint _lastAccrued = accrueInterest();
         require(msg.sender == address(core), "onlyCore");
@@ -459,6 +471,7 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
+        writeOffEvents.push(WriteOffEvent(block.timestamp, account, debt));
         updateBorrowRate(_lastAccrued);
     }
 

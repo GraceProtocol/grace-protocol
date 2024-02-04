@@ -17,6 +17,7 @@ interface ICollateral {
 }
 
 interface IPool {
+    function asset() external view returns (address);
     function getDebtOf(address account) external view returns (uint);
 }
 
@@ -37,7 +38,7 @@ contract Lens {
 
         for(uint i = 0; i < ICore(core).borrowerPoolsCount(borrower); i++) {
             address pool = ICore(core).borrowerPools(borrower, i);
-            uint debtPrice = IOracle(ICore(core).oracle()).viewDebtPriceMantissa(core, pool);
+            uint debtPrice = IOracle(ICore(core).oracle()).viewDebtPriceMantissa(core, IPool(pool).asset());
             uint debtAmount = IPool(pool).getDebtOf(borrower);
             liabilities += debtPrice * debtAmount / 1e18;
         }
