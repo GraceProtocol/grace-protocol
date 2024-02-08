@@ -17,15 +17,6 @@ contract GTR {
     /// @notice Address which may add new minters
     address public operator;
 
-    /// @notice Whether the token can be transferred, or not.
-    bool public transferable;
-
-    /// @notice Record of sources excempt from transfer restrictions
-    mapping (address => bool) public sourceWhitelist;
-
-    /// @notice Record of destinations excempt from transfer restrictions
-    mapping (address => bool) public destinationWhitelist;
-
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
 
@@ -93,34 +84,6 @@ contract GTR {
     constructor(address _operator) {
         operator = _operator;
         emit OperatorChanged(address(0), _operator);
-    }
-
-    /**
-     * @notice Allow transfers
-     */
-    function openTheGates() external {
-        require(msg.sender == operator, "GTR::openTheGates: only the operator can allow transfers");
-        transferable = true;
-    }
-
-    /**
-     * @notice Add or remove an address to/from the source transfer whitelist
-     * @param account The address to add
-     * @param isWhitelisted Whether or not the address should be whitelisted
-     */
-    function setSourceWhitelist(address account, bool isWhitelisted) external {
-        require(msg.sender == operator, "GTR::setSourceWhitelist: only the operator can set the source whitelist");
-        sourceWhitelist[account] = isWhitelisted;
-    }
-
-    /**
-     * @notice Add or remove an address to/from the destination transfer whitelist
-     * @param account The address to add
-     * @param isWhitelisted Whether or not the address should be whitelisted
-     */
-    function setDestinationWhitelist(address account, bool isWhitelisted) external {
-        require(msg.sender == operator, "GTR::setDestinationWhitelist: only the operator can set the destination whitelist");
-        destinationWhitelist[account] = isWhitelisted;
     }
 
     /**
@@ -314,9 +277,6 @@ contract GTR {
     function _transferTokens(address src, address dst, uint96 amount) internal {
         require(src != address(0), "GTR::_transferTokens: cannot transfer from the zero address");
         require(dst != address(0), "GTR::_transferTokens: cannot transfer to the zero address");
-        if (!transferable) {
-            require(sourceWhitelist[src] || destinationWhitelist[dst], "GTR::transfer: transfers are disabled");
-        }
         balances[src] = sub96(balances[src], amount, "GTR::_transferTokens: transfer amount exceeds balance");
         balances[dst] = add96(balances[dst], amount, "GTR::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);

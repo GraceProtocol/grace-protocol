@@ -73,7 +73,6 @@ contract SepoliaDeployerScript is Script {
         Reserve reserve = new Reserve(address(gtr));
         // Set reserve as fee destination
         core.setFeeDestination(address(reserve));
-        gtr.setDestinationWhitelist(address(reserve), true);
 
         /*
             Deploy VaultFactory
@@ -109,14 +108,14 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy WETH collateral
         */
-        deployCollateral(core, weth, ethFeed, 8000, 10000 * 1e18);
+        deployCollateral(core, weth, ethFeed, 8000, 1000000 * 1e18);
         address _deployer = deployer;
 
         /*
             Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
-        deployCollateral(core, Dai, daiFeed, 8000, 100000 * 1e18);
+        deployCollateral(core, Dai, daiFeed, 8000, 1000000 * 1e18);
 
         /*
             Deploy Arb collateral
@@ -126,7 +125,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Arb)).setName("Arbitrum");
         ERC20(payable(Arb)).setSymbol("ARB");
         ERC20(payable(Arb)).mint(_deployer, 1_000_000 * 1e18);
-        deployCollateral(core, Arb, arbFeed, 8000, 100000 * 1e18);
+        deployCollateral(core, Arb, arbFeed, 8000, 1000000 * 1e18);
 
 
         vm.stopBroadcast();
@@ -149,10 +148,9 @@ contract SepoliaDeployerScript is Script {
         }
         pool = core.deployPool(name, symbol, asset, depositCap);
         if(address(vaultFactory) != address(0)) {
-            uint initialBudget = 100000 * 1e18;
             vault = vaultFactory.createVault(
                 pool,
-                initialBudget
+                1
             );
         }
     }
