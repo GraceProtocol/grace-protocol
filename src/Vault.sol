@@ -4,7 +4,8 @@ pragma solidity 0.8.22;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IFactory {
-    function transferReward(address recipient, uint amount) external;
+    function claim() external returns (uint);
+    function claimable(address vault) external view returns(uint);
 }
 
 interface IPool is IERC20 {
@@ -24,9 +25,9 @@ contract Vault {
     uint constant MANTISSA = 1e18;
     IPool public immutable pool;
     IERC20 public immutable asset;
+    IERC20 public immutable gtr;
     bool public immutable isWETH;
     IFactory public factory;
-    uint public rewardBudget;
     uint public lastUpdate;
     uint public rewardIndexMantissa;
     uint public totalSupply;
@@ -41,14 +42,14 @@ contract Vault {
 
     constructor(
         address _pool,
-        uint _initialRewardBudget,
-        bool _isWETH
+        bool _isWETH,
+        address _gtr
     ) {
         pool = IPool(_pool);
         asset = IERC20(IPool(_pool).asset());
         factory = IFactory(msg.sender);
-        rewardBudget = _initialRewardBudget;
         isWETH = _isWETH;
+        gtr = IERC20(_gtr);
         asset.approve(_pool, type(uint256).max);
     }
 
@@ -62,8 +63,8 @@ contract Vault {
     function updateIndex(address user) internal {
         uint deltaT = block.timestamp - lastUpdate;
         if(deltaT > 0) {
-            if(rewardBudget > 0 && totalSupply > 0) {
-                uint rewardsAccrued = deltaT * rewardBudget * MANTISSA / 365 days;
+            if(totalSupply > 0) {
+                uint rewardsAccrued = factory.claim();
                 rewardIndexMantissa += rewardsAccrued / totalSupply;
             }
             lastUpdate = block.timestamp;
@@ -167,8 +168,7 @@ contract Vault {
     }
 
     function claimable(address user) public view returns(uint) {
-        uint deltaT = block.timestamp - lastUpdate;
-        uint rewardsAccrued = deltaT * rewardBudget * MANTISSA / 365 days;
+        uint rewardsAccrued = factory.claimable(address(this));
         uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued / totalSupply) : rewardIndexMantissa;
         uint deltaIndex = _rewardIndexMantissa - accountIndexMantissa[user];
         uint bal = balanceOf[user];
@@ -180,7 +180,7 @@ contract Vault {
         updateIndex(msg.sender);
         uint amount = accruedRewards[msg.sender];
         accruedRewards[msg.sender] = 0;
-        factory.transferReward(msg.sender, amount);
+        gtr.transfer(msg.sender, amount);
         emit Claim(msg.sender, amount);
     }
 
@@ -190,16 +190,8 @@ contract Vault {
         return true;
     }
 
-    function setBudget(uint _rewardBudget) external {
-        updateIndex(msg.sender);
-        require(msg.sender == address(factory), "only factory");
-        rewardBudget = _rewardBudget;
-        emit SetBudget(_rewardBudget);
-    }
-
     event Approval(address indexed owner, address indexed spender, uint value);
     event Deposit(address indexed caller, address indexed owner, uint amount);
     event Withdraw(address indexed caller, address indexed recipient, address indexed owner, uint amount);
     event Claim(address indexed owner, uint amount);
-    event SetBudget(uint rewardBudget);
 }

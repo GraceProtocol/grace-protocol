@@ -78,7 +78,7 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy VaultFactory
         */  
-        VaultFactory vaultFactory = new VaultFactory(address(gtr), weth);
+        VaultFactory vaultFactory = new VaultFactory(address(gtr), weth, 100000 * 1e18);
         // Set vaultFactory as Grace minter
         gtr.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
 
@@ -149,7 +149,7 @@ contract SepoliaDeployerScript is Script {
         }
         pool = core.deployPool(name, symbol, asset, depositCap);
         if(address(vaultFactory) != address(0)) {
-            uint initialBudget = 10000 * 1e18;
+            uint initialBudget = 100000 * 1e18;
             vault = vaultFactory.createVault(
                 pool,
                 initialBudget
