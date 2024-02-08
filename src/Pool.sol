@@ -51,6 +51,10 @@ contract Pool {
     mapping (address => mapping (address => uint)) public borrowAllowance;
     mapping(address => uint) public debtSharesOf;
     mapping(address => uint) public nonces;
+    mapping(address => bool) public isDepositor;
+    mapping(address => bool) public isBorrower;
+    address[] public depositors;
+    address[] public borrowers;
     WriteOffEvent[] public writeOffEvents;
 
     constructor(
@@ -197,12 +201,27 @@ contract Pool {
         return convertToShares(assets);
     }
 
+    function addToDepositors(address account) internal {
+        if(!isDepositor[account]) {
+            isDepositor[account] = true;
+            depositors.push(account);
+        }
+    }
+
+    function addToBorrowers(address account) internal {
+        if(!isBorrower[account]) {
+            isBorrower[account] = true;
+            borrowers.push(account);
+        }
+    }
+
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -218,6 +237,7 @@ contract Pool {
     function transfer(address recipient, uint256 shares) public returns (bool) {
         balanceOf[msg.sender] -= shares;
         balanceOf[recipient] += shares;
+        addToDepositors(recipient);
         emit Transfer(msg.sender, recipient, shares);
         return true;
     }
@@ -242,6 +262,7 @@ contract Pool {
         allowance[sender][msg.sender] -= shares;
         balanceOf[sender] -= shares;
         balanceOf[recipient] += shares;
+        addToDepositors(recipient);
         emit Transfer(sender, recipient, shares);
         return true;
     }
@@ -258,6 +279,7 @@ contract Pool {
         require(core.onPoolDeposit(assets), "beforePoolDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -384,6 +406,7 @@ contract Pool {
         debtSharesOf[owner] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
+        addToBorrowers(owner);
         asset.safeTransfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -407,6 +430,7 @@ contract Pool {
         debtSharesOf[owner] += debtShares;
         debtSupply += debtShares;
         totalDebt += amount;
+        addToBorrowers(owner);
         IWETH(address(asset)).withdraw(amount);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");

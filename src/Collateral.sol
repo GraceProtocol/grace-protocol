@@ -43,6 +43,8 @@ contract Collateral {
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
+    mapping(address => bool) public isDepositor;
+    address[] public depositors;
     SeizeEvent[] public seizeEvents;
 
     constructor(IERC20 _asset, bool _isWETH, address _core) {
@@ -171,12 +173,20 @@ contract Collateral {
         return convertToAssets(shares);
     }
 
+    function addToDepositors(address account) internal {
+        if(!isDepositor[account]) {
+            isDepositor[account] = true;
+            depositors.push(account);
+        }
+    }
+
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
         uint _lastAccrued = accrueFee();
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -194,6 +204,7 @@ contract Collateral {
         require((shares = previewDeposit(msg.value)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        addToDepositors(recipient);
         IWETH(address(asset)).deposit{value: msg.value}();
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -217,6 +228,7 @@ contract Collateral {
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
