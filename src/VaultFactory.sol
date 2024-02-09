@@ -118,6 +118,7 @@ contract VaultFactory {
     }
 
     function getVaultBudget(address vault) external view returns (uint) {
+        if(totalSupply == 0) return 0;
         return rewardBudget * balanceOf[vault] / totalSupply;
     }
 
