@@ -65,7 +65,7 @@ contract Vault {
         if(deltaT > 0) {
             if(totalSupply > 0) {
                 uint rewardsAccrued = factory.claim();
-                rewardIndexMantissa += rewardsAccrued / totalSupply;
+                rewardIndexMantissa += rewardsAccrued * MANTISSA / totalSupply;
             }
             lastUpdate = block.timestamp;
         }
