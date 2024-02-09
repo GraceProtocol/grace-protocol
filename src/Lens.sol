@@ -60,7 +60,6 @@ contract Lens {
     }
 
     function getCollateralSymbols(address core, address borrower) external view returns (string memory symbols) {
-        symbols = new string[](ICore(core).userCollateralsCount(borrower));
         for(uint i = 0; i < ICore(core).userCollateralsCount(borrower); i++) {
             address collateral = ICore(core).userCollaterals(borrower, i);
             address asset = ICollateral(collateral).asset();
@@ -70,7 +69,6 @@ contract Lens {
     }
 
     function getDebtSymbols(address core, address borrower) external view returns (string memory symbols) {
-        symbols = new string[](ICore(core).borrowerPoolsCount(borrower));
         for(uint i = 0; i < ICore(core).borrowerPoolsCount(borrower); i++) {
             address pool = ICore(core).borrowerPools(borrower, i);
             address asset = IPool(pool).asset();

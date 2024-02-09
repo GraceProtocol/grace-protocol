@@ -96,6 +96,10 @@ contract Collateral {
         asset.safeTransfer(core.feeDestination(), fee);
     }
 
+    function allDepositorsLength() public view returns (uint) {
+        return depositors.length;
+    }
+
     function updateFee(uint _lastAccrued) internal {
         lastFeeBps = core.getCollateralFeeBps(address(this), lastFeeBps, _lastAccrued);
     }

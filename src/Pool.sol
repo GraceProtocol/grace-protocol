@@ -118,6 +118,14 @@ contract Pool {
         emit Transfer(address(0), borrowRateDestination, shares);
     }
 
+    function allDepositorsLength() public view returns (uint) {
+        return depositors.length;
+    }
+
+    function allBorrowersLength() public view returns (uint) {
+        return borrowers.length;
+    }
+
     function updateBorrowRate(uint _lastAccrued) internal {
         uint _totalAssets = totalAssets();
         uint util = _totalAssets == 0 ? 0 : totalDebt * 10000 / _totalAssets;
