@@ -169,7 +169,7 @@ contract Vault {
 
     function claimable(address user) public view returns(uint) {
         uint rewardsAccrued = factory.claimable(address(this));
-        uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued / totalSupply) : rewardIndexMantissa;
+        uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued * MANTISSA / totalSupply) : rewardIndexMantissa;
         uint deltaIndex = _rewardIndexMantissa - accountIndexMantissa[user];
         uint bal = balanceOf[user];
         uint accountDelta = bal * deltaIndex / MANTISSA;
