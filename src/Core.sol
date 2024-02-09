@@ -20,6 +20,7 @@ interface IOracle {
     function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external returns (uint256);
     function getDebtPriceMantissa(address token) external returns (uint256);
     function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256);
+    function viewDebtPriceMantissa(address caller, address token) external view returns (uint256);
 }
 
 interface IRateProvider {
@@ -255,6 +256,10 @@ contract Core {
             collateral.totalAssets(),
             capUsd
         );
+    }
+
+    function viewDebtPriceMantissa(IPool pool) external view returns (uint256) {
+        return oracle.viewDebtPriceMantissa(address(this), pool.asset());
     }
 
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool) {
