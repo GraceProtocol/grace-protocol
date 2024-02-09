@@ -85,10 +85,10 @@ contract SepoliaDeployerScript is Script {
             Deploy Dai pool and vault
         */
         address Dai = address(new ERC20());
-        deployPool(core, vaultFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
         ERC20(payable(Dai)).setName("Dai");
         ERC20(payable(Dai)).setSymbol("DAI");
         ERC20(payable(Dai)).mint(deployer, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
 
         /*
             Deploy Dola pool and vault
