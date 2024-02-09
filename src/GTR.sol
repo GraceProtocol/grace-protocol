@@ -53,12 +53,6 @@ contract GTR {
     /// @notice A record of whitelisted minters and their allowances
     mapping (address => uint) public minters;
 
-    /// @notice A record of daily minting limits for each minter
-    mapping (address => uint) public dailyMintLimits;
-
-    /// @notice A record of each day's minting totals for each minter
-    mapping (address => mapping (uint => uint)) public dailyMintTotals;
-
     /// @notice An event thats emitted when the operator address is changed
     event OperatorChanged(address operator, address newOperator);
 
@@ -75,7 +69,7 @@ contract GTR {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice An event thats emitted when a minter is changed
-    event MinterChanged(address indexed minter, uint newAllowance, uint newDailyLimit);
+    event MinterChanged(address indexed minter, uint newAllowance);
 
     /**
      * @notice Construct a new GTR token
@@ -90,13 +84,11 @@ contract GTR {
      * @notice Change the minter address
      * @param minter_ The address of the new minter
      * @param mintableAllowance The amount of tokens the minter is allowed to mint
-     * @param dailyLimit The amount of tokens the minter is allowed to mint per day
      */
-    function setMinter(address minter_, uint mintableAllowance, uint dailyLimit) external {
+    function setMinter(address minter_, uint mintableAllowance) external {
         require(msg.sender == operator, "GTR::setMinter: only the operator can set minters");
         minters[minter_] = mintableAllowance;
-        dailyMintLimits[minter_] = dailyLimit;
-        emit MinterChanged(minter_, mintableAllowance, dailyLimit);
+        emit MinterChanged(minter_, mintableAllowance);
     }
 
     /**
@@ -379,10 +371,8 @@ contract GTR {
      * @param rawAmount The number of tokens to be minted
      */
     function mint(address dst, uint rawAmount) external {
-        require(rawAmount + dailyMintTotals[msg.sender][block.timestamp / 1 days] <= dailyMintLimits[msg.sender], "GTR::mint: daily mint limit exceeded");
         require(dst != address(0), "GTR::mint: cannot transfer to the zero address");
         minters[msg.sender] -= rawAmount;
-        dailyMintTotals[msg.sender][block.timestamp / 1 days] += rawAmount;
         // mint the amount
         uint96 amount = safe96(rawAmount, "GTR::mint: amount exceeds 96 bits");
         totalSupply = safe96(totalSupply + amount, "GTR::mint: totalSupply exceeds 96 bits");

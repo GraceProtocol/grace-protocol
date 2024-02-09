@@ -4,7 +4,9 @@ pragma solidity 0.8.22;
 import "./Vault.sol";
 
 interface IGTR {
+    function minters(address) external view returns (uint);
     function mint(address recipient, uint amount) external;
+    function transfer(address recipient, uint amount) external returns (bool);
 }
 
 contract VaultFactory {
@@ -36,10 +38,13 @@ contract VaultFactory {
 
     function updateIndex(address vault) internal {
         uint deltaT = block.timestamp - lastUpdate;
-        if(deltaT > 0) {
+        if(deltaT > 0) {          
             if(rewardBudget > 0 && totalSupply > 0) {
-                uint rewardsAccrued = deltaT * rewardBudget * MANTISSA / 365 days;
-                rewardIndexMantissa += rewardsAccrued / totalSupply;
+                uint rewardsAccrued = deltaT * rewardBudget / 365 days;  
+                uint mintAllowance = gtr.minters(address(this));
+                rewardsAccrued = rewardsAccrued > mintAllowance ? mintAllowance : rewardsAccrued;
+                rewardIndexMantissa += rewardsAccrued * MANTISSA / totalSupply;
+                gtr.mint(address(this), rewardsAccrued);
             }
             lastUpdate = block.timestamp;
         }
@@ -89,15 +94,17 @@ contract VaultFactory {
         updateIndex(msg.sender);
         uint amount = accruedRewards[msg.sender];
         accruedRewards[msg.sender] = 0;
-        gtr.mint(msg.sender, amount);
+        gtr.transfer(msg.sender, amount);
         emit Claim(msg.sender, amount);
         return amount;
     }
 
     function claimable(address vault) public view returns(uint) {
         uint deltaT = block.timestamp - lastUpdate;
-        uint rewardsAccrued = deltaT * rewardBudget * MANTISSA / 365 days;
-        uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued / totalSupply) : rewardIndexMantissa;
+        uint rewardsAccrued = deltaT * rewardBudget / 365 days;
+        uint mintAllowance = gtr.minters(address(this));
+        rewardsAccrued = rewardsAccrued > mintAllowance ? mintAllowance : rewardsAccrued;
+        uint _rewardIndexMantissa = totalSupply > 0 ? rewardIndexMantissa + (rewardsAccrued * MANTISSA / totalSupply) : rewardIndexMantissa;
         uint deltaIndex = _rewardIndexMantissa - vaultIndexMantissa[vault];
         uint bal = balanceOf[vault];
         uint vaultDelta = bal * deltaIndex / MANTISSA;

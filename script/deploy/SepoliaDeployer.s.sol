@@ -79,7 +79,7 @@ contract SepoliaDeployerScript is Script {
         */  
         VaultFactory vaultFactory = new VaultFactory(address(gtr), weth, 100000 * 1e18);
         // Set vaultFactory as Grace minter
-        gtr.setMinter(address(vaultFactory), type(uint).max, type(uint).max);
+        gtr.setMinter(address(vaultFactory), type(uint).max);
 
         /*
             Deploy Dai pool and vault
