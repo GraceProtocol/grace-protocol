@@ -13,6 +13,7 @@ interface ICore {
 }
 
 interface ICollateral {
+    function asset() external view returns (address);
     function getCollateralOf(address account) external view returns (uint256);
 }
 
@@ -23,6 +24,10 @@ interface IPool {
 
 interface IOracle {
     function viewDebtPriceMantissa(address caller, address token) external view returns (uint256);
+}
+
+interface IERC20 {
+    function symbol() external view returns (string memory);
 }
 
 contract Lens {
@@ -43,5 +48,34 @@ contract Lens {
             liabilities += debtPrice * debtAmount / 1e18;
         }
 
+    }
+
+    function getCollateralDeposits(address core, address borrower) external view returns (uint deposits) {
+        for(uint i = 0; i < ICore(core).userCollateralsCount(borrower); i++) {
+            address collateral = ICore(core).userCollaterals(borrower, i);
+            uint collateralPrice = ICore(core).viewCollateralPriceMantissa(collateral);
+            uint collateralAmount = ICollateral(collateral).getCollateralOf(borrower);
+            deposits += collateralPrice * collateralAmount / 1e18;
+        }
+    }
+
+    function getCollateralSymbols(address core, address borrower) external view returns (string memory symbols) {
+        symbols = new string[](ICore(core).userCollateralsCount(borrower));
+        for(uint i = 0; i < ICore(core).userCollateralsCount(borrower); i++) {
+            address collateral = ICore(core).userCollaterals(borrower, i);
+            address asset = ICollateral(collateral).asset();
+            string memory symbol = IERC20(asset).symbol();
+            symbols = string(abi.encodePacked(symbols, symbol, " "));
+        }
+    }
+
+    function getDebtSymbols(address core, address borrower) external view returns (string memory symbols) {
+        symbols = new string[](ICore(core).borrowerPoolsCount(borrower));
+        for(uint i = 0; i < ICore(core).borrowerPoolsCount(borrower); i++) {
+            address pool = ICore(core).borrowerPools(borrower, i);
+            address asset = IPool(pool).asset();
+            string memory symbol = IERC20(asset).symbol();
+            symbols = string(abi.encodePacked(symbols, symbol, " "));
+        }
     }
 }
