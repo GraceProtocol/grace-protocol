@@ -381,6 +381,7 @@ contract Collateral {
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, to, account, shares, assets);
+        emit Seize(account, to, assets, shares);
         seizeEvents.push(SeizeEvent(block.timestamp, account, assets, to));
         updateFee(_lastAccrued);
     }
@@ -395,6 +396,7 @@ contract Collateral {
         nonces[msg.sender]++;
     }    
 
+    event Seize(address indexed account, address indexed to, uint256 assets, uint shares);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(

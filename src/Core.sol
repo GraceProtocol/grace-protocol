@@ -551,6 +551,7 @@ contract Core {
                 debtAmount: debtAmount,
                 collateralReward: collateralReward
             }));
+            emit Liquidate(borrower, address(pool), address(collateral), debtAmount, collateralReward);
         }
 
         if(collateral.getCollateralOf(borrower) == 0) {
@@ -564,6 +565,7 @@ contract Core {
             }
             collateralUsers[collateral][borrower] = false;
         }
+
     }
 
     function writeOff(address borrower) public lock {
@@ -617,6 +619,8 @@ contract Core {
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];
+
+        emit WriteOff(borrower);
     }
 
     function pullFromCore(IERC20 token, address dst, uint amount) public onlyOwner {
@@ -636,5 +640,8 @@ contract Core {
         require(msg.sender == tx.origin, "onlyExternals");
         lockDepth = 0;
     }
+
+    event Liquidate(address indexed borrower, address indexed pool, address indexed collateral, uint debtAmount, uint collateralReward);
+    event WriteOff(address indexed borrower);
 
 }

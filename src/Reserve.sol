@@ -86,11 +86,11 @@ contract Reserve {
             uint out = balance * shareMantissa / MANTISSA;
             tokens[i].safeTransfer(msg.sender, out);
         }
-        emit RageQuit(msg.sender, gtrAmount);
+        emit RageQuit(msg.sender, gtrAmount, tokens);
         locked = 1;
     }
 
-    event RageQuit(address indexed sender, uint256 gtrAmount);
+    event RageQuit(address indexed sender, uint256 gtrAmount, IERC20[] tokens);
     event AllowanceRequested(uint256[] amounts, IERC20[] tokens, address dst);
     event AllowanceExecuted(uint256[] amounts, IERC20[] tokens, address dst);
 }

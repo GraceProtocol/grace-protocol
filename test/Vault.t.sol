@@ -56,8 +56,8 @@
 //         reward = new ERC20();
 //         vault = new Vault(
 //             address(pool),
-//             1000e18,
-//             false
+//             false,
+//             address(reward)
 //         );
 //         handler = new VaultHandler(vault, pool);
 //     }
@@ -81,7 +81,7 @@
 
 //     function test_constructor() public {
 //         assertEq(address(vault.pool()), address(pool));
-//         assertEq(vault.rewardBudget(), 1000e18);
+//         assertEq(address(vault.gtr()), address(reward));
 //         assertEq(address(vault.factory()), address(this));
 //     }
 
@@ -130,15 +130,6 @@
 //         vm.prank(address(1));
 //         vault.withdrawShares(1e18, address(1), address(this));   
 //         assertEq(pool.balanceOf(address(1)), 1e18);          
-//     }
-
-//     function test_setBudget() public {
-//         vm.startPrank(address(1));
-//         vm.expectRevert("only factory");
-//         vault.setBudget(2000e18);
-//         vm.stopPrank();
-//         vault.setBudget(3000e18);
-//         assertEq(vault.rewardBudget(), 3000e18);
 //     }
 
 // }

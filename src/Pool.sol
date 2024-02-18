@@ -417,6 +417,7 @@ contract Pool {
         addToBorrowers(owner);
         asset.safeTransfer(recipient, amount);
         lastBalance = asset.balanceOf(address(this));
+        emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
     }
@@ -441,6 +442,7 @@ contract Pool {
         addToBorrowers(owner);
         IWETH(address(asset)).withdraw(amount);
         lastBalance = asset.balanceOf(address(this));
+        emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
         recipient.transfer(amount);
@@ -467,6 +469,7 @@ contract Pool {
         totalDebt -= amount;
         asset.safeTransferFrom(msg.sender, address(this), amount);
         lastBalance = asset.balanceOf(address(this));
+        emit Repay(to, amount, debtShares);
         updateBorrowRate(_lastAccrued);
     }
 
@@ -484,6 +487,7 @@ contract Pool {
         totalDebt -= msg.value;
         IWETH(address(asset)).deposit{value: msg.value}();
         lastBalance = asset.balanceOf(address(this));
+        emit Repay(to, msg.value, debtShares);
         updateBorrowRate(_lastAccrued);
     }
 
@@ -503,6 +507,7 @@ contract Pool {
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
+        emit WriteOff(account, debt, debtShares);
         writeOffEvents.push(WriteOffEvent(block.timestamp, account, debt));
         updateBorrowRate(_lastAccrued);
     }
@@ -543,6 +548,9 @@ contract Pool {
         nonces[msg.sender]++;
     }
 
+    event Borrow(address indexed borrower, uint amount, uint debtShares);
+    event Repay(address indexed borrower, uint amount, uint debtShares);
+    event WriteOff(address indexed borrower, uint amount, uint debtShares);
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event BorrowApproval(address indexed owner, address indexed spender, uint256 value);
