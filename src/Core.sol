@@ -176,6 +176,7 @@ contract Core {
             depositCap: depositCap
         });
         poolList.push(pool);
+        emit DeployPool(address(pool));
         return address(pool);
     }
 
@@ -205,6 +206,7 @@ contract Core {
             prevCollateralFactor: 0
         });
         collateralList.push(collateral);
+        emit DeployCollateral(address(collateral));
         return address(collateral);
     }
 
@@ -641,6 +643,8 @@ contract Core {
         lockDepth = 0;
     }
 
+    event DeployCollateral(address indexed collateral);
+    event DeployPool(address indexed pool);
     event Liquidate(address indexed borrower, address indexed pool, address indexed collateral, uint debtAmount, uint collateralReward);
     event WriteOff(address indexed borrower);
 
