@@ -39,7 +39,7 @@ contract SepoliaDeployerScript is Script {
         Oracle oracle = new Oracle();
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
-        RateModel rateModel = new RateModel(8000, 1 days, 0, 2000, 10000);
+        RateModel rateModel = new RateModel(8000, 2 days, 0, 2000, 10000);
         new Lens();
         // WETH address used on Arbitrum Sepolia
         address weth = 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73;
@@ -88,7 +88,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Dai)).setName("Dai");
         ERC20(payable(Dai)).setSymbol("DAI");
         ERC20(payable(Dai)).mint(deployer, 1_000_000 * 1e18);
-        deployPool(core, vaultFactory, Dai, address(0), 1e18, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, Dai, address(0), 1e18, 10_000_000 * 1e18);
 
         /*
             Deploy Dola pool and vault
@@ -97,25 +97,25 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Dola)).setName("Dola USD Stablecoin");
         ERC20(payable(Dola)).setSymbol("DOLA");
         ERC20(payable(Dola)).mint(deployer, 1_000_000 * 1e18);
-        deployPool(core, vaultFactory, Dola, address(0), 1e18, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, Dola, address(0), 1e18, 10_000_000 * 1e18);
 
         /*
             Deploy WETH pool and vault
         */
         address ethFeed = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
-        deployPool(core, vaultFactory, weth, ethFeed, 0, 1_000 * 1e18);
+        deployPool(core, vaultFactory, weth, ethFeed, 0, 10_000 * 1e18);
 
         /*
             Deploy WETH collateral
         */
-        deployCollateral(core, weth, ethFeed, 8000, 1000000 * 1e18);
+        deployCollateral(core, weth, ethFeed, 8000, 1_000_000 * 1e18);
         address _deployer = deployer;
 
         /*
             Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
-        deployCollateral(core, Dai, daiFeed, 8000, 1000000 * 1e18);
+        deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
 
         /*
             Deploy Arb collateral
@@ -125,7 +125,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Arb)).setName("Arbitrum");
         ERC20(payable(Arb)).setSymbol("ARB");
         ERC20(payable(Arb)).mint(_deployer, 1_000_000 * 1e18);
-        deployCollateral(core, Arb, arbFeed, 8000, 1000000 * 1e18);
+        deployCollateral(core, Arb, arbFeed, 8000, 1_000_000 * 1e18);
 
 
         vm.stopBroadcast();
