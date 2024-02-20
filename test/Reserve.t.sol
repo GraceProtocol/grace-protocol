@@ -48,6 +48,11 @@ contract ReserveTest is Test {
         vm.expectRevert("noTokens");
         reserve.rageQuit(1000, emptyTokens);
 
+        // noTokens
+        IERC20[] memory noTokens = new IERC20[](0);
+        vm.expectRevert("noTokens");
+        reserve.rageQuit(1000, noTokens);
+
         // zero balance
         IERC20[] memory zeroBalTokens = new IERC20[](1);
         ERC20 zeroBalToken = new ERC20();
@@ -59,6 +64,8 @@ contract ReserveTest is Test {
     function test_allowance() public {
         ERC20 backing = new ERC20();
         backing.mint(address(reserve), 1000);
+
+        // requestAllowance
         IERC20[] memory tokens = new IERC20[](1);
         tokens[0] = IERC20(address(backing));
         uint[] memory amounts = new uint[](1);
@@ -70,6 +77,8 @@ contract ReserveTest is Test {
         (address token, uint amount) = reserve.getAllowanceRequestTokens(0);
         assertEq(amount, 1001);
         assertEq(token, address(backing));
+        
+        // executeAllowance
         vm.expectRevert("tooSoon");
         reserve.executeAllowance();
         vm.expectRevert("tooLate");
