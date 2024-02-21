@@ -10,12 +10,12 @@ contract RateModelTest is Test {
     address public owner = address(1); // mock core
 
     function setUp() public {
-        rateModel = new RateModel(9000, 3 days, 0, 5000, 10000);
+        rateModel = new RateModel(9000, 100, 0, 5000, 10000);
     }
 
     function test_constructor() public {
         assert(rateModel.KINK_BPS() == 9000);
-        assert(rateModel.HALF_LIFE() == 3 days);
+        assert(rateModel.BPS_PER_DAY() == 100);
         assert(rateModel.MIN_RATE() == 0);
         assert(rateModel.KINK_RATE() == 5000);
         assert(rateModel.MAX_RATE() == 10000);
@@ -29,7 +29,7 @@ contract RateModelTest is Test {
         new RateModel(9000, 3 days, 1, 1, 0);
         vm.expectRevert("kinkBps must be <= 10000");
         new RateModel(10001, 3 days, 0, 5000, 10000);
-        vm.expectRevert("halfLife must be > 0");
+        vm.expectRevert("bpsPerDay must be > 0");
         new RateModel(9000, 0, 0, 5000, 10000);
     }
 
@@ -42,18 +42,39 @@ contract RateModelTest is Test {
     }
 
     function test_getRateBps() public {
-        uint HALF_LIFE = 3 days;
-        assertEq(rateModel.getRateBps(0, 0, 0), 0);
-        vm.warp(block.timestamp + HALF_LIFE);
-        assertEq(rateModel.getRateBps(10000, 0, 1), 5000); // 0->100% rate, 1x half life
-        assertEq(rateModel.getRateBps(0, 10000, 1), 4999); // 100->0% rate, 1x half life
-        assertEq(rateModel.getRateBps(10000, 5000, 1), 7500); // 50->100% rate, 1x half life
-        assertEq(rateModel.getRateBps(9000, 10000, 1), 7499); // 100->50% rate, 1x half life
-        vm.warp(block.timestamp + (2*HALF_LIFE));
-        assertEq(rateModel.getRateBps(10000, 0, 1), 8750); //  0->100% rate, 2x half life
-        assertEq(rateModel.getRateBps(0, 10000, 1), 1249); // 100->0% rate, 2x half life
-        assertEq(rateModel.getRateBps(10000, 5000, 1), 9375); // 50->100% rate, 2x half life
-        assertEq(rateModel.getRateBps(9000, 10000, 1), 5624); // 100->50% rate, 2x half life
+        vm.warp(1 days);
+        uint KINK_UTIL = 9000; // 50% rate
+        uint LAST_RATE = 10000;
+        uint BPS_PER_DAY = rateModel.BPS_PER_DAY();
+        // lastAccrued = block.timestamp; should only use last rate
+        assertEq(rateModel.getRateBps(0, LAST_RATE, 1 days), LAST_RATE);
+        assertEq(rateModel.getRateBps(KINK_UTIL, LAST_RATE, 1 days), LAST_RATE);
+        assertEq(rateModel.getRateBps(KINK_UTIL*2, LAST_RATE, 1 days), LAST_RATE);
+
+        // lastAccrued = block.timestamp - 0.5 days; should change by half BPS_PER_DAY
+        assertEq(rateModel.getRateBps(0, LAST_RATE, 0.5 days), LAST_RATE - (BPS_PER_DAY/2));
+        assertEq(rateModel.getRateBps(KINK_UTIL, LAST_RATE, 0.5 days), LAST_RATE - (BPS_PER_DAY/2));
+        assertEq(rateModel.getRateBps(10000, LAST_RATE, 0.5 days), LAST_RATE);
+        assertEq(rateModel.getRateBps(KINK_UTIL, 0, 0.5 days), BPS_PER_DAY/2);
+
+        // lastAccrued = block.timestamp - 1 days; should change by BPS_PER_DAY
+        assertEq(rateModel.getRateBps(0, LAST_RATE, 0), LAST_RATE - BPS_PER_DAY);
+        assertEq(rateModel.getRateBps(KINK_UTIL, LAST_RATE, 0), LAST_RATE - BPS_PER_DAY);
+        assertEq(rateModel.getRateBps(10000, LAST_RATE, 0), LAST_RATE);
+        assertEq(rateModel.getRateBps(KINK_UTIL, 0, 0), BPS_PER_DAY);
+
+        // lastAccrued = block.timestamp - 2 days; should change by BPS_PER_DAY*2
+        vm.warp(2 days);
+        assertEq(rateModel.getRateBps(0, LAST_RATE, 0), LAST_RATE - BPS_PER_DAY*2);
+        assertEq(rateModel.getRateBps(KINK_UTIL, LAST_RATE, 0), LAST_RATE - (BPS_PER_DAY*2));
+        assertEq(rateModel.getRateBps(10000, LAST_RATE, 0), LAST_RATE);
+        assertEq(rateModel.getRateBps(KINK_UTIL, 0, 0), BPS_PER_DAY*2);
+
+        // lastAccrued = a lot of days; should change up to curveRate
+        vm.warp(10000 days);
+        assertEq(rateModel.getRateBps(0, LAST_RATE, 0), 0);
+        assertEq(rateModel.getRateBps(KINK_UTIL, LAST_RATE, 0), 5000);
+        assertEq(rateModel.getRateBps(10000, 0, 0), 10000);
     }
 
 }

@@ -1,27 +1,20 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.22;
-
-
-// This one is MIT licensed because it's a reusable model that can be useful for others
-
-import "./EMA.sol";
 
 contract RateModel {
 
-    using EMA for EMA.EMAState;
-
     uint immutable public KINK_BPS;
-    uint immutable public HALF_LIFE;
+    uint immutable public BPS_PER_DAY;
     uint immutable public MIN_RATE;
     uint immutable public KINK_RATE;
     uint immutable public MAX_RATE;
 
-    constructor(uint _kinkBps, uint _halfLife, uint _minRate, uint _kinkRate, uint _maxRate) {
+    constructor(uint _kinkBps, uint _bpsPerDay, uint _minRate, uint _kinkRate, uint _maxRate) {
         require(_kinkBps <= 10000, "kinkBps must be <= 10000");
         require(_minRate <= _kinkRate && _kinkRate <= _maxRate, "minRate <= kinkRate <= maxRate");
-        require(_halfLife > 0, "halfLife must be > 0");
+        require(_bpsPerDay > 0, "bpsPerDay must be > 0");
         KINK_BPS = _kinkBps;
-        HALF_LIFE = _halfLife;
+        BPS_PER_DAY = _bpsPerDay;
         MIN_RATE = _minRate;
         KINK_RATE = _kinkRate;
         MAX_RATE = _maxRate;
@@ -37,10 +30,14 @@ contract RateModel {
 
     function getRateBps(uint util, uint lastRate, uint lastAccrued) external view returns (uint256) {
         uint curveRate = getTargetRate(util);
-        // apply EMA to create rate lag
-        EMA.EMAState memory rateEMA;
-        rateEMA.lastUpdate = lastAccrued;
-        rateEMA.ema = lastRate;
-        return rateEMA.simulateEMA(curveRate, HALF_LIFE);
+        uint timeElapsed = block.timestamp - lastAccrued;
+        if(timeElapsed == 0) return lastRate;
+        uint maxChange = BPS_PER_DAY * timeElapsed / 1 days;
+        if(curveRate > lastRate) { // rising
+            return maxChange < curveRate - lastRate ? lastRate + maxChange : curveRate;
+        } else { // falling
+            return maxChange < lastRate - curveRate ? lastRate - maxChange : curveRate;
+        }
+        
     }
 }
