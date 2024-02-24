@@ -52,6 +52,12 @@ contract ERC20 {
         return true;
     }
 
+    function burnFrom(address _from, uint256 _value) internal {
+        totalSupply -= _value;
+        balances[_from] -= _value;
+        emit Transfer(_from, address(0), _value);
+    }
+
     function setDecimals(uint8 _decimals) public {
         decimals = _decimals;
     }

@@ -1,135 +1,295 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity 0.8.22;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.22;
 
-// import "forge-std/Test.sol";
-// import "../src/Vault.sol";
-// import "./mocks/ERC20.sol";
+import "forge-std/Test.sol";
+import "../src/Vault.sol";
+import "./mocks/ERC20.sol";
 
-// contract VaultHandler is Test {
+contract MockFactory {
 
-//     ERC20 public pool;
-//     Vault public vault;
+    ERC20 public gtr;
+    uint _claimable;
 
-//     uint public sumOfDeposits;
+    constructor(ERC20 _gtr) {
+        gtr = _gtr;
+    }
 
-//     constructor(Vault _vault, ERC20 _pool) {
-//         vault = _vault;
-//         pool = _pool;
-//     }
+    function setClaimable(uint value) public {
+        _claimable = value;
+    }
 
-//     function deposit(uint amount) public {
-//         pool.mint(address(this), amount);
-//         pool.approve(address(vault), amount);
-//         vault.depositShares(amount, address(this));
-//         sumOfDeposits += amount;
-//     }
+    function claimable(address) public view returns (uint) {
+        return _claimable;
+    }
 
-//     function withdraw(uint amount) public {
-//         amount = bound(amount, 0, sumOfDeposits);
-//         vault.withdrawShares(amount, address(this), address(this));
-//         sumOfDeposits -= amount;
-//     }
-
-//     function claim() public {
-//         vault.claim();
-//     }
-// }
-
-// contract MockPool is ERC20 {
+    function claim() public returns (uint){
+        gtr.mint(msg.sender, _claimable);
+        return _claimable;
+    }
     
-//     ERC20 public asset;
+}
 
-//     constructor() {
-//         asset = new ERC20();
-//     }
-// }
+contract MockWETH is ERC20 {
+    function deposit() external payable {
+        mint(msg.sender, msg.value);
+    }
 
-// contract VaultTest is Test {
+    function withdraw(uint amount) external {
+        burnFrom(msg.sender, amount);
+        payable(msg.sender).transfer(amount);
+    }
+    
+}
 
-//     MockPool public pool;
-//     ERC20 public reward;
-//     Vault public vault;
-//     VaultHandler public handler;
+contract MockPool is ERC20 {
+    
+    MockWETH public asset;
 
-//     function setUp() public {
-//         pool = new MockPool();
-//         reward = new ERC20();
-//         vault = new Vault(
-//             address(pool),
-//             false,
-//             address(reward)
-//         );
-//         handler = new VaultHandler(vault, pool);
-//     }
+    constructor() {
+        asset = new MockWETH();
+    }
 
-//     // mock
-//     function transferReward(address to, uint amount) external {
-//         reward.mint(to, amount);
-//     }
+    function deposit(uint amount) external returns (uint) {
+        asset.transferFrom(msg.sender, address(this), amount);
+        mint(msg.sender, amount);
+        return amount;
+    }
 
-//     function invariant_totalSupply() public {
-//         assertEq(vault.totalSupply(), handler.sumOfDeposits());
-//     }
+    function withdraw(uint amount) external returns (uint) {
+        asset.transfer(msg.sender, amount);
+        burnFrom(msg.sender, amount);
+        return amount;
+    }
+}
 
-//     function invariant_balanceOf() public {
-//         assertEq(vault.balanceOf(address(handler)), handler.sumOfDeposits());
-//     }
+contract VaultTest is Test {
 
-//     function invariant_poolBalance() public {
-//         assertEq(vault.totalSupply(), pool.balanceOf(address(vault)));
-//     }
+    MockPool public pool;
+    ERC20 public gtr;
+    Vault public vault;
+    MockFactory public factory;
 
-//     function test_constructor() public {
-//         assertEq(address(vault.pool()), address(pool));
-//         assertEq(address(vault.gtr()), address(reward));
-//         assertEq(address(vault.factory()), address(this));
-//     }
+    receive() external payable {}
 
-//     function test_deposit_withdraw(uint timestamp, uint amount) public {
-//         vm.warp(timestamp);
-//         handler.deposit(amount);
-//         // deposit
-//         assertEq(vault.balanceOf(address(handler)), amount);
-//         assertEq(vault.totalSupply(), amount);
-//         assertEq(pool.balanceOf(address(handler)), 0);
-//         assertEq(pool.balanceOf(address(vault)), amount);  
-//         // withdraw
-//         handler.withdraw(amount);
-//         assertEq(vault.balanceOf(address(handler)), 0);
-//         assertEq(vault.totalSupply(), 0);
-//         assertEq(pool.balanceOf(address(handler)), amount);
-//         assertEq(pool.balanceOf(address(vault)), 0);
-//     }
+    function setUp() public {
+        pool = new MockPool();
+        gtr = new ERC20();
+        factory = new MockFactory(gtr);
+        vm.prank(address(factory));
+        vault = new Vault(
+            address(pool),
+            true,
+            address(gtr)
+        );
+    }
 
-//     function test_claimable() public {
-//         vm.warp(1);
-//         handler.deposit(1e18);
-//         vm.warp(365 days + 1);
-//         assertEq(vault.claimable(address(handler)), 1000e18);
-//         handler.claim();
-//         assertEq(reward.balanceOf(address(handler)), 1000e18);
-//     }
+    function test_constructor() public {
+        assertEq(address(vault.pool()), address(pool));
+        assertEq(address(vault.asset()), address(pool.asset()));
+        assertEq(address(vault.gtr()), address(gtr));
+        assertEq(address(vault.factory()), address(factory));
+        assertEq(vault.isWETH(), true);
+        assertEq(pool.asset().allowance(address(vault), address(pool)), type(uint256).max);
+    }
 
-//     function test_claim() public {
-//         vm.warp(1);
-//         handler.deposit(1e18);
-//         vm.warp(365 days + 1);
-//         assertEq(vault.claimable(address(handler)), 1000e18);
-//         handler.claim();
-//         assertEq(reward.balanceOf(address(handler)), 1000e18);
-//         assertEq(vault.claimable(address(handler)), 0);
-//         assertEq(vault.accruedRewards(address(handler)), 0);
-//     }
+    function test_depositShares() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(pool), type(uint256).max);
+        pool.deposit(amount);
+        pool.approve(address(vault), type(uint256).max);
+        vault.depositShares(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
 
+        // withdraw
+        vault.withdrawShares(amount);
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+    }
 
-//     function test_approve_withdrawOnBehalf() public {
-//         pool.mint(address(this), 2e18);
-//         pool.approve(address(vault), 2e18);
-//         vault.depositShares(1e18);
-//         vault.approve(address(1), 1e18);
-//         vm.prank(address(1));
-//         vault.withdrawShares(1e18, address(1), address(this));   
-//         assertEq(pool.balanceOf(address(1)), 1e18);          
-//     }
+    function test_withdrawSharesWithApprove() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(pool), type(uint256).max);
+        pool.deposit(amount);
+        pool.approve(address(vault), type(uint256).max);
+        vault.depositShares(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
 
-// }
+        // withdraw with approve
+        vault.approve(address(1), amount);
+        vm.prank(address(1));
+        vault.withdrawShares(amount, address(1), address(this));
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.allowance(address(this), address(1)), 0);
+    }
+
+    function test_depositSharesRecipient() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(pool), type(uint256).max);
+        pool.deposit(amount);
+        pool.approve(address(vault), type(uint256).max);
+        vault.depositShares(amount, address(1));
+        assertEq(vault.balanceOf(address(1)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw
+        vm.prank(address(1));
+        vault.withdrawShares(amount, address(1), address(1));
+        assertEq(vault.balanceOf(address(1)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+    }
+
+    function test_depositAsset() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(vault), type(uint256).max);
+        vault.depositAsset(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw
+        vault.withdrawAsset(amount);
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+    }
+
+    function test_withdrawAssetWithApprove() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(vault), type(uint256).max);
+        vault.depositAsset(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw with approve
+        vault.approve(address(1), amount);
+        vm.prank(address(1));
+        vault.withdrawAsset(amount, address(1), address(this));
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.allowance(address(this), address(1)), 0);
+    }
+
+    function test_depositAssetRecipient() public {
+        uint amount = 100;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(vault), type(uint256).max);
+        vault.depositAsset(amount, address(1));
+        assertEq(vault.balanceOf(address(1)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw
+        vm.prank(address(1));
+        vault.withdrawAsset(amount, address(1), address(1));
+        assertEq(vault.balanceOf(address(1)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+    }
+
+    function test_depositETH() public {
+        uint amount = 100;
+        vault.depositETH{value: amount}();
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        uint prevBalance = address(this).balance;
+        // withdraw ETH
+        vault.withdrawETH(amount);
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(address(this).balance, prevBalance + amount);
+    }
+
+    function test_withdrawETHWithApprove() public {
+        uint amount = 100;
+        vault.depositETH{value: amount}();
+        assertEq(vault.balanceOf(address(this)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw with approve
+        vault.approve(address(1), amount);
+        vm.prank(address(1));
+        vault.withdrawETH(amount, payable(address(2)), address(this));
+        assertEq(vault.balanceOf(address(this)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(address(2).balance, amount);
+        assertEq(vault.allowance(address(this), address(1)), 0);
+    }
+
+    function test_depositETHRecipient() public {
+        uint amount = 100;
+        vault.depositETH{value: amount}(address(1));
+        assertEq(vault.balanceOf(address(1)), amount);
+        assertEq(pool.balanceOf(address(vault)), amount);
+        assertEq(vault.totalSupply(), amount);
+
+        // withdraw
+        vm.prank(address(1));
+        vault.withdrawETH(amount, payable(address(2)), address(1));
+        assertEq(vault.balanceOf(address(1)), 0);
+        assertEq(pool.balanceOf(address(vault)), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(address(2).balance, amount);
+    }
+
+    function test_approve() public {
+        vault.approve(address(1), 100);
+        assertEq(vault.allowance(address(this), address(1)), 100);
+    }
+
+    function test_claimable() public {
+        uint amount = 1e18;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(vault), type(uint256).max);
+        vault.depositAsset(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+
+        uint claimable = 1e18;
+        factory.setClaimable(claimable);
+
+        assertEq(vault.claimable(address(this)), claimable);
+
+        // another equal deposit
+        pool.asset().mint(address(this), amount);
+        vault.depositAsset(amount, address(1));
+        assertEq(vault.balanceOf(address(1)), amount);
+
+        assertEq(vault.claimable(address(this)), claimable / 2);
+        assertEq(vault.claimable(address(1)), claimable / 2);
+    }
+
+    function test_claim() public {
+        uint amount = 1e18;
+        pool.asset().mint(address(this), amount);
+        pool.asset().approve(address(vault), type(uint256).max);
+        vault.depositAsset(amount);
+        assertEq(vault.balanceOf(address(this)), amount);
+
+        uint claimable = 1e18;
+        factory.setClaimable(claimable);
+        skip(1);
+        vault.claim();
+        assertEq(gtr.balanceOf(address(this)), claimable);
+    }
+
+}
