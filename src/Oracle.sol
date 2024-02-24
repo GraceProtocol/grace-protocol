@@ -85,7 +85,7 @@ contract Oracle {
         } else {
             uint change = high.price * (block.timestamp - high.timestamp) * bpsPerWeek / 10000 / WEEK;
             if (change > high.price * bpsPerWeek / 10000) change = high.price * bpsPerWeek / 10000; // cap change per update to bpsPerWeek
-            if (change > high.price) change = high.price; // integer overflow protection
+            if (change > high.price) change = high.price; // integer underflow protection
             if(price > high.price - change) {
                 return price;
             } else {
