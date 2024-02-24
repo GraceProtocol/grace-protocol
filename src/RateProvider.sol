@@ -7,8 +7,8 @@ interface IRateModel {
 
 contract RateProvider {
 
-    uint constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
-    uint constant MAX_COLLATERAL_FEE_BPS = 1000000; // 10,000%
+    uint public constant MAX_BORROW_RATE_BPS = 1000000; // 10,000%
+    uint public constant MAX_COLLATERAL_FEE_BPS = 1000000; // 10,000%
     address public owner;
     address public defaultInterestRateModel;
     address public defaultCollateralFeeModel;
