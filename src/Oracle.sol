@@ -12,13 +12,19 @@ interface IOracleERC20 {
 
 contract Oracle {
 
+    struct PriceLog {
+        uint price;
+        uint timestamp;
+    }
+
     address public owner;
     uint constant WEEK = 7 days;
+    uint public bpsPerWeek = 1000;
     mapping(address => address) public collateralFeeds;
     mapping(address => address) public poolFeeds;
     mapping(address => uint) public poolFixedPrices;
-    mapping (address => mapping(address => mapping(uint => uint))) public weeklyLows; // caller => token => week => price
-    mapping (address => mapping(address => mapping(uint => uint))) public weeklyHighs; // caller => token => week => price
+    mapping (address => mapping(address => PriceLog)) public collateralLows; // caller => underlying => price
+    mapping (address => mapping(address => PriceLog)) public poolHighs; // caller => underlying => price
 
     constructor() {
         owner = msg.sender;
@@ -33,6 +39,7 @@ contract Oracle {
     function setCollateralFeed(address token, address feed) onlyOwner external { collateralFeeds[token] = feed; }
     function setPoolFeed(address token, address feed) onlyOwner external { poolFeeds[token] = feed; }
     function setPoolFixedPrice(address token, uint price) onlyOwner external { poolFixedPrices[token] = price; }
+    function setBpsPerWeek(uint _bpsPerWeek) onlyOwner external { bpsPerWeek = _bpsPerWeek; }
 
     function getNormalizedPrice(address token, address feed) internal view returns (uint normalizedPrice) {
         (,int256 signedPrice,,,) = IChainlinkFeed(feed).latestRoundData();
@@ -54,29 +61,56 @@ contract Oracle {
         return cappedPrice < price ? cappedPrice : price;
     }
 
+    function getCollateralLow(address caller, address token) public view returns (uint){
+        uint price = getNormalizedPrice(token, collateralFeeds[token]);
+        PriceLog storage low = collateralLows[caller][token];
+        if(low.price == 0 || price < low.price) {
+            return price;
+        } else {
+            uint change = low.price * (block.timestamp - low.timestamp) * bpsPerWeek / 10000 / WEEK;
+            if (change > low.price * bpsPerWeek / 10000) change = low.price * bpsPerWeek / 10000; // cap change per update to bpsPerWeek
+            if(price < low.price + change) {
+                return price;
+            } else {
+                return low.price + change;
+            }
+        }
+    }
+
+    function getPoolHigh(address caller, address token) public view returns (uint){
+        uint price = getNormalizedPrice(token, poolFeeds[token]);
+        PriceLog storage high = poolHighs[caller][token];
+        if(price > high.price) {
+            return price;
+        } else {
+            uint change = high.price * (block.timestamp - high.timestamp) * bpsPerWeek / 10000 / WEEK;
+            if (change > high.price * bpsPerWeek / 10000) change = high.price * bpsPerWeek / 10000; // cap change per update to bpsPerWeek
+            if (change > high.price) change = high.price; // integer underflow protection
+            if(price > high.price - change) {
+                return price;
+            } else {
+                return high.price - change;
+            }
+        }
+    }
+
     function getCollateralPriceMantissa(address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
-            uint normalizedPrice = getNormalizedPrice(token, feed);
-            // potentially store price as this week's low
-            uint week = block.timestamp / WEEK;
-            uint weekLow = weeklyLows[msg.sender][token][week];
-            if(weekLow == 0 || normalizedPrice < weekLow) {
-                weeklyLows[msg.sender][token][week] = normalizedPrice;
-                weekLow = normalizedPrice;
-                emit RecordWeeklyLow(msg.sender, token, normalizedPrice);
+            uint low = getCollateralLow(msg.sender, token);
+            if(low != collateralLows[msg.sender][token].price) {
+                collateralLows[msg.sender][token] = PriceLog(low, block.timestamp);
+                emit RecordCollateralLow(msg.sender, token, low);
             }
-            
-            // if collateralFactorBps is 0, return normalizedPrice;
-            if(collateralFactorBps == 0) return normalizedPrice;
-            // get last week's low
-            uint lastWeekLow = weeklyLows[msg.sender][token][week - 1];
+            uint normalizedPrice = getNormalizedPrice(token, feed);
+            // if collateralFactorBps is 0, return capped normalizedPrice;
+            if(collateralFactorBps == 0) return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
-            uint twoWeekLow = weekLow > lastWeekLow && lastWeekLow > 0 ? lastWeekLow : weekLow;
-            if(twoWeekLow > 0 && newBorrowingPower > twoWeekLow) {
-                uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
-                return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
+            if(low > 0 && newBorrowingPower > low) {
+                uint dampenedPrice = low * 10000 / collateralFactorBps;
+                uint unCappedPrice = dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
+                return getCappedPrice(unCappedPrice, totalCollateral, capUsd);
             }
             return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
         }
@@ -87,74 +121,45 @@ contract Oracle {
         if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
-            // get normalized price
-            uint normalizedPrice = getNormalizedPrice(token, feed);
-            // potentially store price as this week's high
-            uint week = block.timestamp / WEEK;
-            uint weekHigh = weeklyHighs[msg.sender][token][week];
-            if(normalizedPrice > weekHigh) {
-                weeklyHighs[msg.sender][token][week] = normalizedPrice;
-                weekHigh = normalizedPrice;
-                emit RecordWeeklyHigh(msg.sender, token, normalizedPrice);
+            uint high = getPoolHigh(msg.sender, token);
+            if(high != poolHighs[msg.sender][token].price) {
+                poolHighs[msg.sender][token] = PriceLog(high, block.timestamp);
+                emit RecordPoolHigh(msg.sender, token, high);
             }
-            // get last week's high
-            uint lastWeekHigh = weeklyHighs[msg.sender][token][week - 1];
-            // find the higher of the two
-            uint twoWeekHigh = weekHigh > lastWeekHigh ? weekHigh : lastWeekHigh;
-            // if the higher of the two is greater than the normalized price, return the higher of the two
-            return twoWeekHigh > normalizedPrice ? twoWeekHigh : normalizedPrice;
+            return high;
         }
         return 0;
     }
 
-    function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256) {
+    function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) public view returns (uint256) {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
+            uint low = getCollateralLow(caller, token);
             uint normalizedPrice = getNormalizedPrice(token, feed);
-            uint week = block.timestamp / WEEK;
-            uint weekLow = weeklyLows[caller][token][week];
-            if(weekLow == 0 || normalizedPrice < weekLow) {
-                weekLow = normalizedPrice;
-            }
-            // if collateralFactorBps is 0, return normalizedPrice;
-            if(collateralFactorBps == 0) return normalizedPrice;
-            // get last week's low
-            uint lastWeekLow = weeklyLows[caller][token][week - 1];
+            // if collateralFactorBps is 0, return capped normalizedPrice;
+            if(collateralFactorBps == 0) return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
-            uint twoWeekLow = weekLow > lastWeekLow && lastWeekLow > 0 ? lastWeekLow : weekLow;
-            if(twoWeekLow > 0 && newBorrowingPower > twoWeekLow) {
-                uint dampenedPrice = twoWeekLow * 10000 / collateralFactorBps;
-                return dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
+            if(low > 0 && newBorrowingPower > low) {
+                uint dampenedPrice = low * 10000 / collateralFactorBps;
+                uint unCappedPrice = dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
+                return getCappedPrice(unCappedPrice, totalCollateral, capUsd);
             }
             return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
         }
         return 0;
-
     }
-    function viewDebtPriceMantissa(address caller, address token) external view returns (uint256) {
+
+    function viewDebtPriceMantissa(address caller, address token) public view returns (uint256) {
         if(poolFixedPrices[token] > 0) return poolFixedPrices[token];
         address feed = poolFeeds[token];
         if(feed != address(0)) {
-            // get normalized price
-            uint normalizedPrice = getNormalizedPrice(token, feed);
-            // potentially store price as this week's high
-            uint week = block.timestamp / WEEK;
-            uint weekHigh = weeklyHighs[caller][token][week];
-            if(normalizedPrice > weekHigh) {
-                weekHigh = normalizedPrice;
-            }
-            // get last week's high
-            uint lastWeekHigh = weeklyHighs[caller][token][week - 1];
-            // find the higher of the two
-            uint twoWeekHigh = weekHigh > lastWeekHigh ? weekHigh : lastWeekHigh;
-            // if the higher of the two is greater than the normalized price, return the higher of the two
-            return twoWeekHigh > normalizedPrice ? twoWeekHigh : normalizedPrice;
+            return getPoolHigh(caller, token);
         }
         return 0;
     }
     
-    event RecordWeeklyLow(address indexed caller, address indexed token, uint price);
-    event RecordWeeklyHigh(address indexed caller, address indexed token, uint price);
+    event RecordCollateralLow(address indexed caller, address indexed token, uint price);
+    event RecordPoolHigh(address indexed caller, address indexed token, uint price);
 
 }
