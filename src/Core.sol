@@ -511,11 +511,11 @@ contract Core {
                         capUsd
                     );
                     uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
-                    uint thisCollateralUsd = thisCollateralBalance * collateralFactorBps * price / 10000 / MANTISSA;
+                    uint thisCollateralUsd = thisCollateralBalance * price / MANTISSA;
                     if(thisCollateral != collateral) {
                         require(thisCollateralUsd <= collateralBalanceUsd, "notMostValuableCollateral");
                     }
-                    assetsUsd += thisCollateralUsd;
+                    assetsUsd += thisCollateralUsd * collateralFactorBps / 10000;
                 }
             }
             require(assetsUsd < liabilitiesUsd, "insufficientLiabilities");
