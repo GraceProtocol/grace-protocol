@@ -250,6 +250,7 @@ contract Core {
     }
 
     function viewCollateralPriceMantissa(ICollateral collateral) external view returns (uint256) {
+        require(collateralsData[collateral].enabled == true, "collateralNotAdded");
         uint capUsd = getCapUsd(collateral);
         return oracle.viewCollateralPriceMantissa(
             address(this),
@@ -261,6 +262,7 @@ contract Core {
     }
 
     function viewDebtPriceMantissa(IPool pool) external view returns (uint256) {
+        require(poolsData[pool].enabled == true, "poolNotAdded");
         return oracle.viewDebtPriceMantissa(address(this), pool.asset());
     }
 
