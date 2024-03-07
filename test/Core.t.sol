@@ -1008,4 +1008,175 @@ contract CoreTest is Test {
         core.liquidate(address(this), IPool(pool), ICollateral(collateral), liquidatedAmount);
     }
 
+    function test_liquidateMaxLiquidationIncentiveExceeded () public {
+        uint MANTISSA = 1e18;
+        skip(7 days);
+        oracle.setSkipChecks(true);
+        address collateralUnderlying = address(new ERC20());
+        address poolUnderlying = address(new ERC20());
+        address collateral = core.deployCollateral(collateralUnderlying, 5000, type(uint).max);
+        address pool = core.deployPool("TEST", "TEST", poolUnderlying, type(uint).max);
+
+        // deposit collateral
+        uint collateralDeposit = 100_000e18;
+        ERC20(payable(collateralUnderlying)).mint(address(this), collateralDeposit);
+        ERC20(payable(collateralUnderlying)).approve(collateral, collateralDeposit);
+        Collateral(payable(collateral)).deposit(collateralDeposit);
+
+        // lend
+        uint poolDeposit = 100_000e18;
+        ERC20(payable(poolUnderlying)).mint(address(this), poolDeposit);
+        ERC20(payable(poolUnderlying)).approve(pool, poolDeposit);
+        Pool(payable(pool)).deposit(poolDeposit);
+
+        // borrow
+        uint borrowedAmount = 50_000e18;
+        Pool(payable(pool)).borrow(borrowedAmount);
+        assertEq(core.poolBorrowers(IPool(pool), address(this)), true);
+        assertEq(address(core.borrowerPools(address(this), 0)), pool);
+
+        // change collateral price
+        uint newCollateralPrice = 5e17; // 50% drop
+        oracle.setCollateralPrice(newCollateralPrice);
+
+        // liquidate
+        address liquidator = address(1);
+        uint liquidatorBalance = 10000e18;
+        ERC20(payable(poolUnderlying)).mint(liquidator, liquidatorBalance);
+        vm.startPrank(liquidator);
+        ERC20(payable(poolUnderlying)).approve(address(core), type(uint).max);
+        uint liquidatedAmount = 10001e18;
+        vm.expectRevert("maxLiquidationIncentiveExceeded");
+        core.liquidate(address(this), IPool(pool), ICollateral(collateral), liquidatedAmount);
+    }
+
+    function test_writeOff() public {
+        skip(7 days);
+        oracle.setSkipChecks(true);
+        address collateralUnderlying = address(new ERC20());
+        address poolUnderlying = address(new ERC20());
+        address collateral = core.deployCollateral(collateralUnderlying, 5000, type(uint).max);
+        address pool = core.deployPool("TEST", "TEST", poolUnderlying, 1000e18);
+
+        // deposit collateral
+        uint collateralDeposit = 1000e18;
+        ERC20(payable(collateralUnderlying)).mint(address(this), collateralDeposit);
+        ERC20(payable(collateralUnderlying)).approve(collateral, collateralDeposit);
+        Collateral(payable(collateral)).deposit(collateralDeposit);
+
+        // deposit to another address to avoid minimum balance error
+        uint collateral2Deposit = 10**3;
+        ERC20(payable(collateralUnderlying)).mint(address(this), collateral2Deposit);
+        ERC20(payable(collateralUnderlying)).approve(collateral, collateral2Deposit);
+        Collateral(payable(collateral)).deposit(collateral2Deposit, address(1));
+        // lend
+        uint poolDeposit = 1000e18;
+        ERC20(payable(poolUnderlying)).mint(address(this), poolDeposit);
+        ERC20(payable(poolUnderlying)).approve(pool, poolDeposit);
+        Pool(payable(pool)).deposit(poolDeposit);
+
+        // borrow
+        uint borrowedAmount = 500e18;
+        Pool(payable(pool)).borrow(borrowedAmount);
+        assertEq(core.poolBorrowers(IPool(pool), address(this)), true);
+        assertEq(address(core.borrowerPools(address(this), 0)), pool);
+
+        // change collateral price
+        uint newCollateralPrice = 1e17; // 90% drop
+        oracle.setCollateralPrice(newCollateralPrice);
+
+        // write off
+        core.writeOff(address(this));
+        assertEq(core.poolBorrowers(IPool(pool), address(this)), false);
+        assertEq(core.borrowerPoolsCount(address(this)), 0);
+        assertEq(core.collateralUsers(ICollateral(collateral), address(this)), false);
+        assertEq(core.userCollateralsCount(address(this)), 0);
+        assertEq(Pool(payable(pool)).getDebtOf(address(this)), 0, "debt should be written off");
+        assertEq(Collateral(payable(collateral)).getCollateralOf(address(this)), 0, "collateral should be seized");
+    }
+
+    function test_writeOffNoLiabilities () public {
+        skip(7 days);
+        vm.expectRevert("noLiabilities");
+        core.writeOff(address(this));
+    }
+
+    function test_writeOffInsufficientLiabilities () public {
+        skip(7 days);
+        oracle.setSkipChecks(true);
+        address collateralUnderlying = address(new ERC20());
+        address poolUnderlying = address(new ERC20());
+        address collateral = core.deployCollateral(collateralUnderlying, 5000, type(uint).max);
+        address pool = core.deployPool("TEST", "TEST", poolUnderlying, 1000e18);
+
+        // deposit collateral
+        uint collateralDeposit = 100e18;
+        ERC20(payable(collateralUnderlying)).mint(address(this), collateralDeposit);
+        ERC20(payable(collateralUnderlying)).approve(collateral, collateralDeposit);
+        Collateral(payable(collateral)).deposit(collateralDeposit);
+
+        // lend
+        uint poolDeposit = 100e18;
+        ERC20(payable(poolUnderlying)).mint(address(this), poolDeposit);
+        ERC20(payable(poolUnderlying)).approve(pool, poolDeposit);
+        Pool(payable(pool)).deposit(poolDeposit);
+
+        // borrow
+        uint borrowedAmount = 50e18;
+        Pool(payable(pool)).borrow(borrowedAmount);
+        assertEq(core.poolBorrowers(IPool(pool), address(this)), true);
+        assertEq(address(core.borrowerPools(address(this), 0)), pool);
+
+        // change collateral price
+        uint newCollateralPrice = 5e17; // 50% drop
+        oracle.setCollateralPrice(newCollateralPrice);
+
+        vm.expectRevert("insufficientLiabilities");
+        core.writeOff(address(this));
+    }
+
+    function test_writeOffCollateralBalanceTooHigh () public {
+        skip(7 days);
+        oracle.setSkipChecks(true);
+        address collateralUnderlying = address(new ERC20());
+        address poolUnderlying = address(new ERC20());
+        address collateral = core.deployCollateral(collateralUnderlying, 5000, type(uint).max);
+        address pool = core.deployPool("TEST", "TEST", poolUnderlying, 1000e18);
+
+        // deposit collateral
+        uint collateralDeposit = 10001e18;
+        ERC20(payable(collateralUnderlying)).mint(address(this), collateralDeposit);
+        ERC20(payable(collateralUnderlying)).approve(collateral, collateralDeposit);
+        Collateral(payable(collateral)).deposit(collateralDeposit);
+
+        // lend
+        uint poolDeposit = 1000e18;
+        ERC20(payable(poolUnderlying)).mint(address(this), poolDeposit);
+        ERC20(payable(poolUnderlying)).approve(pool, poolDeposit);
+        Pool(payable(pool)).deposit(poolDeposit);
+
+        // borrow
+        uint borrowedAmount = 500e18;
+        Pool(payable(pool)).borrow(borrowedAmount);
+        assertEq(core.poolBorrowers(IPool(pool), address(this)), true);
+        assertEq(address(core.borrowerPools(address(this), 0)), pool);
+
+        // change collateral price
+        uint newCollateralPrice = 1e17; // 90% drop
+        oracle.setCollateralPrice(newCollateralPrice);
+
+        vm.expectRevert("collateralBalanceTooHigh");
+        core.writeOff(address(this));
+    }
+
+    function test_resetLockContract() public {
+        vm.expectRevert("onlyExternals");
+        core.resetLock();
+    }
+
+    function test_resetLockExternal() public {
+        vm.prank(tx.origin);
+        core.resetLock();
+    }
+
 }

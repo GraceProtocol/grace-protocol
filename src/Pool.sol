@@ -502,7 +502,7 @@ contract Pool {
     function writeOff(address account) public lock {
         uint _lastAccrued = accrueInterest();
         require(msg.sender == address(core), "onlyCore");
-        uint debtShares = debtSharesOf[msg.sender];
+        uint debtShares = debtSharesOf[account];
         uint debt = convertToDebtAssets(debtShares);
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
