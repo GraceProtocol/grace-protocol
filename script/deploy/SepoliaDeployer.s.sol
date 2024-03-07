@@ -39,7 +39,7 @@ contract SepoliaDeployerScript is Script {
         Oracle oracle = new Oracle();
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
-        RateModel rateModel = new RateModel(8000, 2 days, 0, 2000, 10000);
+        RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
         new Lens();
         // WETH address used on Arbitrum Sepolia
         address weth = 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73;
