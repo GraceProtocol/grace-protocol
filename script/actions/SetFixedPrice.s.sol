@@ -7,7 +7,7 @@ import {Oracle} from "src/Oracle.sol";
 contract SetCapUsd is Script {
 
     Oracle oracle = Oracle(0x62dE0B76eB5c647A91c96b535111fEd071a051e5);
-    address token = address(0);
+    address token = 0x2A11d290756B0A9C3B900EF5eDd8600654B2587C;
     uint price = 1e18;
 
     function setUp() public {}
