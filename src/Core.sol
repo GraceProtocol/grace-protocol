@@ -82,7 +82,7 @@ contract Core {
     uint public liquidationIncentiveBps = 1000; // 10%
     uint public maxLiquidationIncentiveUsd = 1000e18; // $1,000
     uint public badDebtCollateralThresholdUsd = 1000e18; // $1000
-    uint public writeOffIncentiveBps = 1000; // 10%
+    uint public writeOffIncentiveBps = 2500; // 25%
     uint256 public lockDepth;
     address public owner;
     IOracle public oracle;
