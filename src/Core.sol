@@ -619,7 +619,7 @@ contract Core {
             uint reward = thisCollateralBalance * writeOffIncentiveBps / 10000;
             uint fee = thisCollateralBalance - reward;
             if(fee > 0) thisCollateral.seize(borrower, fee, feeDestination);
-            if(reward > 0) thisCollateral.seize(borrower, reward, msg.sender);
+            if(reward > 0) thisCollateral.seize(borrower, type(uint).max, msg.sender);
             collateralUsers[thisCollateral][borrower] = false;
         }
         delete userCollaterals[borrower];

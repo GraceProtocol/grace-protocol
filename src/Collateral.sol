@@ -374,6 +374,7 @@ contract Collateral {
     function seize(address account, uint256 assets, address to) public lock {
         uint _lastAccrued = accrueFee();
         require(msg.sender == address(core), "onlyCore");
+        if(assets == type(uint).max) assets = getCollateralOf(account);
         uint shares = convertToShares(assets);
         totalSupply -= shares;
         balanceOf[account] -= shares;
