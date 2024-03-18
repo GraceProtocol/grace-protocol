@@ -45,7 +45,11 @@ contract Pool {
     uint public lastAccrued;
     uint public lastBalance;
     uint public lastBorrowRate;
+    uint public totalReferrerShares;
+    uint public rewardIndexMantissa;
+    uint constant MANTISSA = 1e18;
     uint constant MINIMUM_BALANCE = 10**3;
+    uint constant REF_FEE_BPS = 1000; // 10%
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint)) public allowance;
     mapping (address => mapping (address => uint)) public borrowAllowance;
@@ -53,6 +57,10 @@ contract Pool {
     mapping(address => uint) public nonces;
     mapping(address => bool) public isDepositor;
     mapping(address => bool) public isBorrower;
+    mapping(address => address) public borrowerReferrers;
+    mapping(address => uint) public referrerShares;
+    mapping(address => uint) public referrerIndexMantissa;
+    mapping(address => uint) public accruedReferrerRewards;
     address[] public depositors;
     address[] public borrowers;
     WriteOffEvent[] public writeOffEvents;
@@ -114,8 +122,24 @@ contract Pool {
         totalDebt += interest;
         totalSupply += shares;
         address borrowRateDestination = core.feeDestination();
-        balanceOf[borrowRateDestination] += shares;
-        emit Transfer(address(0), borrowRateDestination, shares);
+        uint referrersReward;
+        if(totalReferrerShares > 0 && debtSupply > 0) {
+            referrersReward = shares * totalReferrerShares * REF_FEE_BPS / debtSupply / 10000;
+            balanceOf[address(this)] += referrersReward;
+            emit Transfer(address(0), address(this), referrersReward);
+            rewardIndexMantissa += referrersReward * MANTISSA / totalReferrerShares;
+        }
+        uint fee = referrersReward > shares ? 0 : shares - referrersReward;
+        balanceOf[borrowRateDestination] += fee;
+        emit Transfer(address(0), borrowRateDestination, fee);
+    }
+
+    function updateReferrer(address referrer) internal {
+        uint deltaIndex = rewardIndexMantissa - referrerIndexMantissa[referrer];
+        uint bal = referrerShares[referrer];
+        uint referrerDelta = bal * deltaIndex;
+        referrerIndexMantissa[referrer] = rewardIndexMantissa;
+        accruedReferrerRewards[referrer] += referrerDelta / MANTISSA;
     }
 
     function allDepositorsLength() public view returns (uint) {
@@ -401,7 +425,7 @@ contract Pool {
         return supply == 0 ? assets : mulDivDown(assets, debtSupply, totalDebt);
     }
 
-    function borrow(uint256 amount, address owner, address recipient) public lock {
+    function borrow(uint256 amount, address owner, address recipient, address referrer) public lock {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -411,7 +435,18 @@ contract Pool {
         }
         uint debtShares;
         require((debtShares = previewBorrow(amount)) != 0, "zeroShares");
+        if(borrowerReferrers[owner] != address(0)) {
+            updateReferrer(borrowerReferrers[owner]);
+            referrerShares[borrowerReferrers[owner]] -= debtSharesOf[owner];
+            totalReferrerShares -= debtSharesOf[owner];
+        }
         debtSharesOf[owner] += debtShares;
+        if(referrer != address(0)) {
+            updateReferrer(referrer);
+            referrerShares[referrer] += debtSharesOf[owner];
+            totalReferrerShares += debtSharesOf[owner];
+        }
+        borrowerReferrers[owner] = referrer;
         debtSupply += debtShares;
         totalDebt += amount;
         addToBorrowers(owner);
@@ -423,10 +458,10 @@ contract Pool {
     }
 
     function borrow(uint256 amount) public {
-        borrow(amount, msg.sender, msg.sender);
+        borrow(amount, msg.sender, msg.sender, borrowerReferrers[msg.sender]);
     }
 
-    function borrowETH(uint256 amount, address owner, address payable recipient) public payable lock onlyWETH {
+    function borrowETH(uint256 amount, address owner, address payable recipient, address referrer) public payable lock onlyWETH {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -436,7 +471,18 @@ contract Pool {
         }
         uint debtShares;
         require((debtShares = previewBorrow(amount)) != 0, "zeroShares");
+        if(borrowerReferrers[owner] != address(0)) {
+            updateReferrer(borrowerReferrers[owner]);
+            referrerShares[borrowerReferrers[owner]] -= debtSharesOf[owner];
+            totalReferrerShares -= debtSharesOf[owner];
+        }
         debtSharesOf[owner] += debtShares;
+        if(referrer != address(0)) {
+            updateReferrer(referrer);
+            referrerShares[referrer] += debtSharesOf[owner];
+            totalReferrerShares += debtSharesOf[owner];
+        }
+        borrowerReferrers[owner] = referrer;
         debtSupply += debtShares;
         totalDebt += amount;
         addToBorrowers(owner);
@@ -449,7 +495,7 @@ contract Pool {
     }
 
     function borrowETH(uint256 amount) public payable {
-        borrowETH(amount, msg.sender, payable(msg.sender));
+        borrowETH(amount, msg.sender, payable(msg.sender), borrowerReferrers[msg.sender]);
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
@@ -464,6 +510,11 @@ contract Pool {
         if(amount == type(uint256).max) amount = getDebtOf(to);
         uint debtShares;
         require((debtShares = previewRepay(amount)) != 0, "zeroShares");
+        if(borrowerReferrers[to] != address(0)) {
+            updateReferrer(borrowerReferrers[to]);
+            referrerShares[borrowerReferrers[to]] -= debtShares;
+            totalReferrerShares -= debtShares;
+        }
         debtSharesOf[to] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= amount;
@@ -482,6 +533,11 @@ contract Pool {
         require(core.onPoolRepay(to, msg.value), "beforePoolRepay");
         uint debtShares;
         require((debtShares = previewRepay(msg.value)) != 0, "zeroShares");
+        if(borrowerReferrers[to] != address(0)) {
+            updateReferrer(borrowerReferrers[to]);
+            referrerShares[borrowerReferrers[to]] -= debtShares;
+            totalReferrerShares -= debtShares;
+        }
         debtSharesOf[to] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= msg.value;
@@ -504,12 +560,25 @@ contract Pool {
         require(msg.sender == address(core), "onlyCore");
         uint debtShares = debtSharesOf[account];
         uint debt = convertToDebtAssets(debtShares);
+        if(borrowerReferrers[account] != address(0)) {
+            updateReferrer(borrowerReferrers[account]);
+            referrerShares[borrowerReferrers[account]] -= debtShares;
+            totalReferrerShares -= debtShares;
+        }
         debtSharesOf[account] -= debtShares;
         debtSupply -= debtShares;
         totalDebt -= debt;
         emit WriteOff(account, debt, debtShares);
         writeOffEvents.push(WriteOffEvent(block.timestamp, account, debt));
         updateBorrowRate(_lastAccrued);
+    }
+
+    function claimReferralRewards() external {
+        accrueInterest();
+        updateReferrer(msg.sender);
+        uint amount = accruedReferrerRewards[msg.sender];
+        accruedReferrerRewards[msg.sender] = 0;
+        IERC20(address(this)).transfer(msg.sender, amount);
     }
 
     function getAssetsOf(address account) public view returns (uint) {
@@ -541,6 +610,7 @@ contract Pool {
     function pull(address _stuckToken, address dst, uint amount) external {
         require(msg.sender == address(core), "onlyCore");
         require(_stuckToken != address(asset), "cannotPullUnderlying");
+        require(_stuckToken != address(this), "cannotPullSelf");
         IERC20(_stuckToken).safeTransfer(dst, amount);
     }
 
