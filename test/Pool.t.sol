@@ -213,4 +213,22 @@ contract PoolTest is Test, MockCore {
         assertEq(stuckToken.balanceOf(address(pool)), 0);
         assertEq(stuckToken.balanceOf(address(this)), 1000);
     }
+
+    function test_claimReferralRewards() public {
+        address REFERRER = address(2);
+        uint LIQUIDITY = 10e18;
+        uint BORROW = 1e18;
+        asset.mint(address(this), LIQUIDITY);
+        asset.approve(address(pool), LIQUIDITY);
+        pool.deposit(LIQUIDITY, address(this));
+        pool.borrow(BORROW, address(this), address(this), REFERRER);
+        vm.warp(block.timestamp + 365 days);
+        assertEq(pool.balanceOf(REFERRER), 0);
+        vm.startPrank(REFERRER);
+        pool.claimReferralRewards();
+        assertEq(pool.balanceOf(REFERRER), BORROW / 10);
+        pool.redeem(BORROW / 10);
+        assertEq(asset.balanceOf(REFERRER), BORROW / 10);
+        
+    }
 }
