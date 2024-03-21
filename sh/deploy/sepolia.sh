@@ -4,4 +4,4 @@
 source .env
 
 # To deploy and verify our contract
-forge script script/deploy/SepoliaDeployer.s.sol --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv -g 10000
+forge script script/deploy/SepoliaDeployer.s.sol --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv -g 10000

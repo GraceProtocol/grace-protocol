@@ -506,8 +506,8 @@ contract Pool {
 
     function repay(address to, uint amount) public lock {
         uint _lastAccrued = accrueInterest();
-        require(core.onPoolRepay(to, amount), "beforePoolRepay");
         if(amount == type(uint256).max) amount = getDebtOf(to);
+        require(core.onPoolRepay(to, amount), "beforePoolRepay");
         uint debtShares;
         require((debtShares = previewRepay(amount)) != 0, "zeroShares");
         if(borrowerReferrers[to] != address(0)) {
@@ -530,9 +530,16 @@ contract Pool {
 
     function repayETH(address to) public payable lock onlyWETH {
         uint _lastAccrued = accrueInterest();
-        require(core.onPoolRepay(to, msg.value), "beforePoolRepay");
+        uint amount = msg.value;
+        uint debt = getDebtOf(to);
+        uint refund;
+        if(amount > debt) {
+            amount = debt;
+            refund = amount - debt;
+        }
+        require(core.onPoolRepay(to, amount), "beforePoolRepay");
         uint debtShares;
-        require((debtShares = previewRepay(msg.value)) != 0, "zeroShares");
+        require((debtShares = previewRepay(amount)) != 0, "zeroShares");
         if(borrowerReferrers[to] != address(0)) {
             updateReferrer(borrowerReferrers[to]);
             referrerShares[borrowerReferrers[to]] -= debtShares;
@@ -540,11 +547,14 @@ contract Pool {
         }
         debtSharesOf[to] -= debtShares;
         debtSupply -= debtShares;
-        totalDebt -= msg.value;
-        IWETH(address(asset)).deposit{value: msg.value}();
+        totalDebt -= amount;
+        IWETH(address(asset)).deposit{value: amount}();
         lastBalance = asset.balanceOf(address(this));
-        emit Repay(to, msg.value, debtShares);
+        emit Repay(to, amount, debtShares);
         updateBorrowRate(_lastAccrued);
+        if(refund > 0) {
+            payable(msg.sender).transfer(refund);
+        }
     }
 
     function repayETH() public payable {
