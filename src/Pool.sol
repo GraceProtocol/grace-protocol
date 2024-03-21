@@ -542,8 +542,8 @@ contract Pool {
         uint debt = getDebtOf(to);
         uint refund;
         if(amount > debt) {
-            amount = debt;
             refund = amount - debt;
+            amount = debt;
         }
         require(core.onPoolRepay(to, amount), "beforePoolRepay");
         uint debtShares;
