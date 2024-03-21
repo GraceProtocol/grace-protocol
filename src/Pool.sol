@@ -425,7 +425,7 @@ contract Pool {
         return supply == 0 ? assets : mulDivDown(assets, debtSupply, totalDebt);
     }
 
-    function borrow(uint256 amount, address owner, address referrer) public lock {
+    function borrow(uint256 amount, address referrer, address owner) public lock {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -457,11 +457,15 @@ contract Pool {
         updateBorrowRate(_lastAccrued);
     }
 
-    function borrow(uint256 amount) public {
-        borrow(amount, msg.sender, borrowerReferrers[msg.sender]);
+    function borrow(uint256 amount, address referrer) public {
+        borrow(amount, referrer, msg.sender);
     }
 
-    function borrowETH(uint256 amount, address owner, address referrer) public payable lock onlyWETH {
+    function borrow(uint256 amount) public {
+        borrow(amount, borrowerReferrers[msg.sender], msg.sender);
+    }
+
+    function borrowETH(uint256 amount, address referrer, address owner) public payable lock onlyWETH {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -494,8 +498,12 @@ contract Pool {
         payable(msg.sender).transfer(amount);
     }
 
+    function borrowETH(uint256 amount, address referrer) public payable {
+        borrowETH(amount, referrer, msg.sender);
+    }
+
     function borrowETH(uint256 amount) public payable {
-        borrowETH(amount, msg.sender, borrowerReferrers[msg.sender]);
+        borrowETH(amount, borrowerReferrers[msg.sender], msg.sender);
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
