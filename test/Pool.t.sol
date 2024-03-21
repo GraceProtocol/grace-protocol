@@ -125,8 +125,8 @@ contract PoolTest is Test, MockCore {
         asset.approve(address(pool), 2000);
         pool.deposit(2000, address(this));
         vm.expectRevert("minimumBalance");
-        pool.borrow(2000, address(this), address(this), address(0));
-        pool.borrow(1000, address(this), address(this), address(0));
+        pool.borrow(2000, address(this), address(0));
+        pool.borrow(1000, address(this), address(0));
         assertEq(pool.isBorrower(address(this)), true);
         assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
@@ -151,7 +151,7 @@ contract PoolTest is Test, MockCore {
         asset.mint(address(this), 2000);
         asset.approve(address(pool), 2000);
         pool.deposit(2000, address(this));
-        pool.borrow(1000, address(this), address(this), address(0));
+        pool.borrow(1000, address(this), address(0));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(asset.balanceOf(address(this)), 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -183,7 +183,7 @@ contract PoolTest is Test, MockCore {
         asset.mint(address(this), DEPOSIT + INTEREST);
         asset.approve(address(pool), DEPOSIT + BORROW + INTEREST);
         pool.deposit(DEPOSIT, address(this));
-        pool.borrow(BORROW, address(this), address(this), address(0));
+        pool.borrow(BORROW, address(this), address(0));
         vm.warp(block.timestamp + 365 days);
         // mock core sets borrow rate to 100%, so we expect 1000 interest
         assertEq(pool.getDebtOf(address(this)), BORROW + INTEREST);
@@ -221,7 +221,7 @@ contract PoolTest is Test, MockCore {
         asset.mint(address(this), LIQUIDITY);
         asset.approve(address(pool), LIQUIDITY);
         pool.deposit(LIQUIDITY, address(this));
-        pool.borrow(BORROW, address(this), address(this), REFERRER);
+        pool.borrow(BORROW, address(this), REFERRER);
         vm.warp(block.timestamp + 365 days);
         assertEq(pool.balanceOf(REFERRER), 0);
         vm.startPrank(REFERRER);

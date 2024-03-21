@@ -425,7 +425,7 @@ contract Pool {
         return supply == 0 ? assets : mulDivDown(assets, debtSupply, totalDebt);
     }
 
-    function borrow(uint256 amount, address owner, address recipient, address referrer) public lock {
+    function borrow(uint256 amount, address owner, address referrer) public lock {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -450,7 +450,7 @@ contract Pool {
         debtSupply += debtShares;
         totalDebt += amount;
         addToBorrowers(owner);
-        asset.safeTransfer(recipient, amount);
+        asset.safeTransfer(msg.sender, amount);
         lastBalance = asset.balanceOf(address(this));
         emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -458,10 +458,10 @@ contract Pool {
     }
 
     function borrow(uint256 amount) public {
-        borrow(amount, msg.sender, msg.sender, borrowerReferrers[msg.sender]);
+        borrow(amount, msg.sender, borrowerReferrers[msg.sender]);
     }
 
-    function borrowETH(uint256 amount, address owner, address payable recipient, address referrer) public payable lock onlyWETH {
+    function borrowETH(uint256 amount, address owner, address referrer) public payable lock onlyWETH {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -491,11 +491,11 @@ contract Pool {
         emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
-        recipient.transfer(amount);
+        payable(msg.sender).transfer(amount);
     }
 
     function borrowETH(uint256 amount) public payable {
-        borrowETH(amount, msg.sender, payable(msg.sender), borrowerReferrers[msg.sender]);
+        borrowETH(amount, msg.sender, borrowerReferrers[msg.sender]);
     }
 
     function previewRepay(uint256 assets) public view returns (uint256) {
