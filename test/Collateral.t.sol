@@ -6,19 +6,33 @@ import "../src/Collateral.sol";
 import "./mocks/ERC20.sol";
 import "./mocks/MockCore.sol";
 
+contract MockWETH is ERC20 {
+    function deposit() external payable {
+        mint(msg.sender, msg.value);
+    }
+
+    function withdraw(uint amount) external {
+        burnFrom(msg.sender, amount);
+        payable(msg.sender).transfer(amount);
+    }
+    
+}
+
 contract CollateralTest is Test, MockCore {
 
     Collateral public collateral;
-    ERC20 public asset;
+    MockWETH public asset;
 
     function setUp() public {
-        asset = new ERC20();
+        asset = new MockWETH();
         collateral = new Collateral(
             IERC20(address(asset)),
-            false,
+            true,
             address(this)
         );
     }
+
+    receive() external payable {}
 
     function test_constructor() public {
         assertEq(address(collateral.asset()), address(asset));
@@ -26,9 +40,9 @@ contract CollateralTest is Test, MockCore {
     }
 
     function test_deposit() public {
-        asset.mint(address(this), 1000);
+        asset.deposit{value: 1000}();
         asset.approve(address(collateral), 1000);
-        collateral.deposit(1000, address(this));
+        collateral.deposit(1000);
         assertEq(asset.balanceOf(address(collateral)), 1000);
         assertEq(collateral.balanceOf(address(this)), 1000);
         assertEq(collateral.totalSupply(), 1000);
@@ -36,38 +50,126 @@ contract CollateralTest is Test, MockCore {
         assertEq(collateral.getCollateralOf(address(this)), 1000);  
     }
 
-    function test_mint() public {
-        asset.mint(address(this), 1000);
+    function test_depositRecipient() public {
+        asset.deposit{value: 1000}();
         asset.approve(address(collateral), 1000);
-        collateral.mint(1000, address(this));
+        collateral.deposit(1000, address(1));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(1)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);   
+        assertEq(collateral.getCollateralOf(address(1)), 1000);  
+    }
+
+    function test_depositETH() public {
+        collateral.depositETH{value: 1000}();
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);   
+        assertEq(collateral.getCollateralOf(address(this)), 1000);  
+    }
+
+    function test_depositETHRecipient() public {
+        collateral.depositETH{value: 1000}(address(1));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(1)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);   
+        assertEq(collateral.getCollateralOf(address(1)), 1000);  
+    }
+
+    function test_mint() public {
+        asset.deposit{value: 1000}();
+        asset.approve(address(collateral), 1000);
+        collateral.mint(1000);
         assertEq(asset.balanceOf(address(collateral)), 1000);
         assertEq(collateral.balanceOf(address(this)), 1000);
         assertEq(collateral.totalSupply(), 1000);
         assertEq(collateral.lastBalance(), 1000);
         assertEq(collateral.getCollateralOf(address(this)), 1000);
+    }
+
+    function test_mintRecipient() public {
+        asset.deposit{value: 1000}();
+        asset.approve(address(collateral), 1000);
+        collateral.mint(1000, address(1));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(1)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(1)), 1000);
     }
 
     function test_withdraw() public {
-        asset.mint(address(this), 2000);
+        asset.deposit{value: 2000}();
         asset.approve(address(collateral), 2000);
         collateral.deposit(2000, address(this));
         vm.expectRevert("minimumBalance");
-        collateral.withdraw(2000, address(this), address(this));
-        collateral.withdraw(1000, address(this), address(this));
+        collateral.withdraw(2000);
+        collateral.withdraw(1000);
         assertEq(asset.balanceOf(address(collateral)), 1000);
         assertEq(collateral.balanceOf(address(this)), 1000);
         assertEq(collateral.totalSupply(), 1000);
         assertEq(collateral.lastBalance(), 1000);
         assertEq(collateral.getCollateralOf(address(this)), 1000);
+    }
+
+    function test_withdrawOnBehalfToRecipient() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        collateral.approve(address(1), 1000);
+        vm.startPrank(address(1));
+        collateral.withdraw(1000, address(2), address(this));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(asset.balanceOf(address(2)), 1000);
+    }
+
+    function test_withdrawETH() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        vm.expectRevert("minimumBalance");
+        collateral.withdrawETH(2000);
+        uint balBefore = address(this).balance;
+        collateral.withdrawETH(1000);
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(address(this).balance, balBefore + 1000);
+    }
+
+    function test_withdrawETHOnBehalfToRecipient() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        collateral.approve(address(1), 2000);
+        vm.startPrank(address(1));
+        vm.expectRevert("minimumBalance");
+        collateral.withdrawETH(2000, payable(address(2)), address(this));
+        collateral.withdrawETH(1000, payable(address(2)), address(this));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(address(2).balance, 1000);
     }
 
     function test_redeem() public {
-        asset.mint(address(this), 2000);
+        asset.deposit{value: 2000}();
         asset.approve(address(collateral), 2000);
         collateral.deposit(2000, address(this));
         vm.expectRevert("minimumBalance");
-        collateral.redeem(2000, address(this), address(this));
-        collateral.redeem(1000, address(this), address(this));
+        collateral.redeem(2000);
+        collateral.redeem(1000);
         assertEq(asset.balanceOf(address(collateral)), 1000);
         assertEq(collateral.balanceOf(address(this)), 1000);
         assertEq(collateral.totalSupply(), 1000);
@@ -75,8 +177,58 @@ contract CollateralTest is Test, MockCore {
         assertEq(collateral.getCollateralOf(address(this)), 1000);
     }
 
+    function test_redeemOnBehalfToRecipient() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        collateral.approve(address(1), 2000);
+        vm.startPrank(address(1));
+        vm.expectRevert("minimumBalance");
+        collateral.redeem(2000, address(2), address(this));
+        collateral.redeem(1000, address(2), address(this));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(asset.balanceOf(address(2)), 1000);
+    }
+
+    function test_redeemETH() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        vm.expectRevert("minimumBalance");
+        collateral.redeemETH(2000);
+        uint balBefore = address(this).balance;
+        collateral.redeemETH(1000);
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(address(this).balance, balBefore + 1000);
+    }
+
+    function test_redeemETHOnBehalfToRecipient() public {
+        asset.deposit{value: 2000}();
+        asset.approve(address(collateral), 2000);
+        collateral.deposit(2000, address(this));
+        collateral.approve(address(1), 2000);
+        vm.startPrank(address(1));
+        vm.expectRevert("minimumBalance");
+        collateral.redeemETH(2000, payable(address(2)), address(this));
+        collateral.redeemETH(1000, payable(address(2)), address(this));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 1000);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(this)), 1000);
+        assertEq(address(2).balance, 1000);
+    }
+
     function test_approve() public {
-        asset.mint(address(this), 1000);
+        asset.deposit{value: 1000}();
         asset.approve(address(collateral), 1000);
         collateral.deposit(1000, address(this));
         collateral.approve(address(1), 1000);
@@ -84,7 +236,7 @@ contract CollateralTest is Test, MockCore {
     }
 
     function test_seize() public {
-        asset.mint(address(this), 2000);
+        asset.deposit{value: 2000}();
         asset.approve(address(collateral), 2000);
         collateral.deposit(2000, address(1));
         vm.expectRevert("minimumBalance");
@@ -100,7 +252,7 @@ contract CollateralTest is Test, MockCore {
     }
 
     function test_pull() public {
-        asset.mint(address(this), 1000);
+        asset.deposit{value: 1000}();
         asset.approve(address(collateral), 1000);
         collateral.deposit(1000, address(this));
         vm.expectRevert("cannotPullUnderlying");
@@ -119,7 +271,7 @@ contract CollateralTest is Test, MockCore {
     }
 
     function test_accrueFee() public {
-        asset.mint(address(this), 10000);
+        asset.deposit{value: 10000}();
         asset.approve(address(collateral), 10000);
         collateral.deposit(10000, address(this));
         vm.warp(block.timestamp + (365 days / 2));

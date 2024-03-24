@@ -465,7 +465,7 @@ contract Pool {
         borrow(amount, borrowerReferrers[msg.sender], msg.sender);
     }
 
-    function borrowETH(uint256 amount, address referrer, address owner) public payable lock onlyWETH {
+    function borrowETH(uint256 amount, address referrer, address owner) public lock onlyWETH {
         uint _lastAccrued = accrueInterest();
         require(core.onPoolBorrow(owner, amount), "beforePoolBorrow");
         if (msg.sender != owner) {
@@ -498,11 +498,11 @@ contract Pool {
         payable(msg.sender).transfer(amount);
     }
 
-    function borrowETH(uint256 amount, address referrer) public payable {
+    function borrowETH(uint256 amount, address referrer) public {
         borrowETH(amount, referrer, msg.sender);
     }
 
-    function borrowETH(uint256 amount) public payable {
+    function borrowETH(uint256 amount) public {
         borrowETH(amount, borrowerReferrers[msg.sender], msg.sender);
     }
 
