@@ -71,6 +71,6 @@ contract ERC20 {
     }
 
     fallback() external payable{
-        mint(msg.sender, 1e21);
+        mint(msg.sender, 1000 * (10 ** decimals));
     }
 }

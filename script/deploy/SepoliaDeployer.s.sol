@@ -42,7 +42,7 @@ contract SepoliaDeployerScript is Script {
         RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
         new Lens();
         // WETH address used on Arbitrum Sepolia
-        address weth = 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73;
+        address weth = 0x4200000000000000000000000000000000000006;
 
         /*
             Deploy Core
@@ -109,8 +109,8 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(USDC)).setName("USDC");
         ERC20(payable(USDC)).setSymbol("USDC");
         ERC20(payable(USDC)).setDecimals(6);
-        ERC20(payable(USDC)).mint(_deployer, 1_000_000 * 1e18);
-        deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10_000_000 * 1e18);
+        ERC20(payable(USDC)).mint(_deployer, 1_000_000 * 1e6);
+        deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10_000_000 * 1e6);
 
         /*
             Deploy WBTC pool and vault
@@ -119,13 +119,14 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(WBTC)).setName("WBTC");
         ERC20(payable(WBTC)).setSymbol("WBTC");
         ERC20(payable(WBTC)).setDecimals(8);
-        ERC20(payable(WBTC)).mint(_deployer, 1_000_000 * 1e18);
-        deployPool(core, vaultFactory, WBTC, address(0), 1e18 * (10 ** (18-8)), 10_000_000 * 1e18);
+        ERC20(payable(WBTC)).mint(_deployer, 1_000_000 * 1e8);
+        address wbtcFeed = 0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298;
+        deployPool(core, vaultFactory, WBTC, wbtcFeed, 0, 10_000_000 * 1e8);
 
         /*
             Deploy WETH pool and vault
         */
-        address ethFeed = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
+        address ethFeed = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1;
         deployPool(core, vaultFactory, weth, ethFeed, 0, 10_000 * 1e18);
 
         /*
@@ -136,31 +137,19 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy Dai collateral
         */
-        address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
+        address daiFeed = 0xD1092a65338d049DB68D7Be6bD89d17a0929945e;
         deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
 
         /*
             Deploy USDC collateral
         */
-        address usdcFeed = 0x0153002d20B96532C639313c2d54c3dA09109309;
+        address usdcFeed = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
         deployCollateral(core, USDC, usdcFeed, 8000, 1_000_000 * 1e18);
 
         /*
             Deploy WBTC collateral
         */
-        address wbtcFeed = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
         deployCollateral(core, WBTC, wbtcFeed, 8000, 1_000_000 * 1e18);
-
-        /*
-            Deploy Arb collateral
-        */
-        address Arb = address(new ERC20());
-        address arbFeed = 0xD1092a65338d049DB68D7Be6bD89d17a0929945e;
-        ERC20(payable(Arb)).setName("Arbitrum");
-        ERC20(payable(Arb)).setSymbol("ARB");
-        ERC20(payable(Arb)).mint(_deployer, 1_000_000 * 1e18);
-        deployCollateral(core, Arb, arbFeed, 8000, 1_000_000 * 1e18);
-
 
         vm.stopBroadcast();
     }
