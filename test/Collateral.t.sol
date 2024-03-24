@@ -251,6 +251,29 @@ contract CollateralTest is Test, MockCore {
         assertEq(collateral.getCollateralOf(address(1)), 1000);  
     }
 
+    function test_seizeAll() public {
+        // add 1000 from address(1) to avoid minimumBalance
+        asset.deposit{value: 1000}();
+        asset.transfer(address(1), 1000);
+        vm.startPrank(address(1));
+        asset.approve(address(collateral), 1000);
+        collateral.deposit(1000, address(1));
+        vm.stopPrank();
+
+
+        asset.deposit{value: 1000}();
+        asset.approve(address(collateral), 1000);
+        collateral.deposit(1000);
+        collateral.seize(address(this), type(uint).max, address(this));
+        assertEq(asset.balanceOf(address(collateral)), 1000);
+        assertEq(asset.balanceOf(address(this)), 1000);
+        assertEq(collateral.balanceOf(address(1)), 1000);
+        assertEq(collateral.balanceOf(address(this)), 0);
+        assertEq(collateral.totalSupply(), 1000);
+        assertEq(collateral.lastBalance(), 1000);
+        assertEq(collateral.getCollateralOf(address(1)), 1000);  
+    }
+
     function test_pull() public {
         asset.deposit{value: 1000}();
         asset.approve(address(collateral), 1000);
@@ -288,6 +311,33 @@ contract CollateralTest is Test, MockCore {
         assertEq(collateral.totalAssets(), 1000);
         vm.expectRevert("minimumBalance");
         collateral.withdraw(1000, address(this), address(this));
+    }
+
+    function test_permit() public {
+        uint signerPrivateKey = 0xa11ce;
+        address OWNER = vm.addr(signerPrivateKey);
+        address SPENDER = address(1);
+        uint VALUE = 1;
+        uint NONCE = 0;
+        uint DEADLINE = type(uint256).max;
+        bytes32 PERMIT_TYPEHASH = collateral.PERMIT_TYPEHASH();
+        bytes32 DOMAIN_SEPARATOR = collateral.DOMAIN_SEPARATOR();
+        bytes32 digest = keccak256(abi.encodePacked(
+            '\x19\x01',
+            DOMAIN_SEPARATOR,
+            keccak256(abi.encode(
+                PERMIT_TYPEHASH,
+                OWNER,
+                SPENDER,
+                VALUE,
+                NONCE,
+                DEADLINE
+            ))
+        ));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        collateral.permit(OWNER, SPENDER, VALUE, DEADLINE, v, r, s);
+        assertEq(collateral.allowance(OWNER, SPENDER), VALUE);
+        assertEq(collateral.nonces(OWNER), 1);
     }
 
 }

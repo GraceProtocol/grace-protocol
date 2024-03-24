@@ -221,6 +221,33 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.getDebtOf(address(this)), 0);
     }
 
+    function test_repayAll() public {
+        asset.mint(address(this), 2000);
+        asset.approve(address(pool), 2000);
+        pool.deposit(2000, address(this));
+        vm.expectRevert("minimumBalance");
+        pool.borrow(2000);
+        pool.borrow(1000);
+        assertEq(pool.isBorrower(address(this)), true);
+        assertEq(pool.borrowers(0), address(this));
+        assertEq(asset.balanceOf(address(pool)), 1000);
+        assertEq(asset.balanceOf(address(this)), 1000);
+        assertEq(pool.balanceOf(address(this)), 2000);
+        assertEq(pool.totalSupply(), 2000);
+        assertEq(pool.totalDebt(), 1000);
+        assertEq(pool.lastBalance(), 1000);
+        assertEq(pool.getAssetsOf(address(this)), 2000);
+        assertEq(pool.getDebtOf(address(this)), 1000);
+        asset.approve(address(pool), 1000);
+        pool.repay(type(uint256).max);
+        assertEq(asset.balanceOf(address(pool)), 2000);
+        assertEq(pool.balanceOf(address(this)), 2000);
+        assertEq(pool.totalSupply(), 2000);
+        assertEq(pool.lastBalance(), 2000);
+        assertEq(pool.getAssetsOf(address(this)), 2000);
+        assertEq(pool.getDebtOf(address(this)), 0);
+    }
+
     function test_borrowOnBehalf() public {
         asset.mint(address(this), 2000);
         asset.approve(address(pool), 2000);
@@ -289,6 +316,36 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.getDebtOf(address(this)), 1000);
         asset.approve(address(pool), 1000);
         pool.repayETH{value:1000}();
+        assertEq(asset.balanceOf(address(pool)), 2000);
+        assertEq(pool.balanceOf(address(this)), 2000);
+        assertEq(pool.totalSupply(), 2000);
+        assertEq(pool.lastBalance(), 2000);
+        assertEq(pool.getAssetsOf(address(this)), 2000);
+        assertEq(pool.getDebtOf(address(this)), 0);
+    }
+
+    function test_repayETHRefund() public {
+        asset.deposit{value:2000}();
+        asset.approve(address(pool), 2000);
+        pool.deposit(2000);
+        vm.expectRevert("minimumBalance");
+        pool.borrowETH(2000);
+        uint balance = address(this).balance;
+        pool.borrowETH(1000);
+        assertEq(pool.isBorrower(address(this)), true);
+        assertEq(pool.borrowers(0), address(this));
+        assertEq(asset.balanceOf(address(pool)), 1000);
+        assertEq(address(this).balance, balance + 1000);
+        assertEq(pool.balanceOf(address(this)), 2000);
+        assertEq(pool.totalSupply(), 2000);
+        assertEq(pool.totalDebt(), 1000);
+        assertEq(pool.lastBalance(), 1000);
+        assertEq(pool.getAssetsOf(address(this)), 2000);
+        assertEq(pool.getDebtOf(address(this)), 1000);
+        asset.approve(address(pool), 1000);
+        uint balanceBefore = address(this).balance;
+        pool.repayETH{value:1001}();
+        assertEq(address(this).balance, balanceBefore - 1000); // 1 wei refund
         assertEq(asset.balanceOf(address(pool)), 2000);
         assertEq(pool.balanceOf(address(this)), 2000);
         assertEq(pool.totalSupply(), 2000);
@@ -379,5 +436,71 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.balanceOf(REFERRER), BORROW / 10);
         pool.redeem(BORROW / 10);
         assertEq(asset.balanceOf(REFERRER), BORROW / 10);
+    }
+
+    function test_getDebtOf() public {
+        uint DEPOSIT = 2000;
+        uint BORROW = 1000;
+        asset.mint(address(this), DEPOSIT);
+        asset.approve(address(pool), DEPOSIT + BORROW);
+        pool.deposit(DEPOSIT, address(this));
+        pool.borrow(BORROW, address(1), address(this));
+        assertEq(pool.getDebtOf(address(this)), BORROW);
+        vm.warp(block.timestamp + 365 days);
+        assertEq(pool.getDebtOf(address(this)), BORROW * 2);
+    }
+
+    function test_permit() public {
+        uint signerPrivateKey = 0xa11ce;
+        address OWNER = vm.addr(signerPrivateKey);
+        address SPENDER = address(1);
+        uint VALUE = 1;
+        uint NONCE = 0;
+        uint DEADLINE = type(uint256).max;
+        bytes32 PERMIT_TYPEHASH = pool.PERMIT_TYPEHASH();
+        bytes32 DOMAIN_SEPARATOR = pool.DOMAIN_SEPARATOR();
+        bytes32 digest = keccak256(abi.encodePacked(
+            '\x19\x01',
+            DOMAIN_SEPARATOR,
+            keccak256(abi.encode(
+                PERMIT_TYPEHASH,
+                OWNER,
+                SPENDER,
+                VALUE,
+                NONCE,
+                DEADLINE
+            ))
+        ));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        pool.permit(OWNER, SPENDER, VALUE, DEADLINE, v, r, s);
+        assertEq(pool.allowance(OWNER, SPENDER), VALUE);
+        assertEq(pool.nonces(OWNER), 1);
+    }
+
+    function test_permitBorrow() public {
+        uint signerPrivateKey = 0xa11ce;
+        address OWNER = vm.addr(signerPrivateKey);
+        address SPENDER = address(1);
+        uint VALUE = 1;
+        uint NONCE = 0;
+        uint DEADLINE = type(uint256).max;
+        bytes32 PERMIT_TYPEHASH = pool.PERMIT_BORROW_TYPEHASH();
+        bytes32 DOMAIN_SEPARATOR = pool.DOMAIN_SEPARATOR();
+        bytes32 digest = keccak256(abi.encodePacked(
+            '\x19\x01',
+            DOMAIN_SEPARATOR,
+            keccak256(abi.encode(
+                PERMIT_TYPEHASH,
+                OWNER,
+                SPENDER,
+                VALUE,
+                NONCE,
+                DEADLINE
+            ))
+        ));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        pool.permitBorrow(OWNER, SPENDER, VALUE, DEADLINE, v, r, s);
+        assertEq(pool.borrowAllowance(OWNER, SPENDER), VALUE);
+        assertEq(pool.nonces(OWNER), 1);
     }
 }
