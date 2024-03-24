@@ -98,6 +98,29 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Dola)).setSymbol("DOLA");
         ERC20(payable(Dola)).mint(deployer, 1_000_000 * 1e18);
         deployPool(core, vaultFactory, Dola, address(0), 1e18, 10_000_000 * 1e18);
+        
+        
+        address _deployer = deployer; // avoid stack too deep error
+        
+        /*
+            Deploy USDC pool and vault
+        */
+        address USDC = address(new ERC20());
+        ERC20(payable(USDC)).setName("USDC");
+        ERC20(payable(USDC)).setSymbol("USDC");
+        ERC20(payable(USDC)).setDecimals(6);
+        ERC20(payable(USDC)).mint(_deployer, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10_000_000 * 1e18);
+
+        /*
+            Deploy WBTC pool and vault
+        */
+        address WBTC = address(new ERC20());
+        ERC20(payable(WBTC)).setName("WBTC");
+        ERC20(payable(WBTC)).setSymbol("WBTC");
+        ERC20(payable(WBTC)).setDecimals(8);
+        ERC20(payable(WBTC)).mint(_deployer, 1_000_000 * 1e18);
+        deployPool(core, vaultFactory, WBTC, address(0), 1e18 * (10 ** (18-8)), 10_000_000 * 1e18);
 
         /*
             Deploy WETH pool and vault
@@ -109,13 +132,24 @@ contract SepoliaDeployerScript is Script {
             Deploy WETH collateral
         */
         deployCollateral(core, weth, ethFeed, 8000, 1_000_000 * 1e18);
-        address _deployer = deployer;
 
         /*
             Deploy Dai collateral
         */
         address daiFeed = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61;
         deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
+
+        /*
+            Deploy USDC collateral
+        */
+        address usdcFeed = 0x0153002d20B96532C639313c2d54c3dA09109309;
+        deployCollateral(core, USDC, usdcFeed, 8000, 1_000_000 * 1e18);
+
+        /*
+            Deploy WBTC collateral
+        */
+        address wbtcFeed = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
+        deployCollateral(core, WBTC, wbtcFeed, 8000, 1_000_000 * 1e18);
 
         /*
             Deploy Arb collateral
