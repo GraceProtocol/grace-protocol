@@ -47,8 +47,10 @@ contract BorrowController {
     function updateDailyBorrowLimit() internal {
         uint timeElapsed = block.timestamp - dailyBorrowLimitLastUpdate[msg.sender];
         if(timeElapsed == 0) return;
+        // add daily limit capacity linearly based on time elapsed
         uint addedCapacity = timeElapsed * dailyBorrowLimitUsd / 1 days;
         uint newLimit = lastDailyBorrowLimitRemainingUsd[msg.sender] + addedCapacity;
+        // cap the limit to the maximum daily limit
         if(newLimit > dailyBorrowLimitUsd) newLimit = dailyBorrowLimitUsd;
         lastDailyBorrowLimitRemainingUsd[msg.sender] = newLimit;
         dailyBorrowLimitLastUpdate[msg.sender] = block.timestamp;
@@ -67,6 +69,7 @@ contract BorrowController {
     function onRepay(address /*pool*/, address /*borrower*/, uint amount, uint price) external {
         updateDailyBorrowLimit();
         uint repaidDebtUsd = amount * price / MANTISSA;
+        // free up the repaid debt capacity up to the daily limit
         if(lastDailyBorrowLimitRemainingUsd[msg.sender] + repaidDebtUsd > dailyBorrowLimitUsd) {
             lastDailyBorrowLimitRemainingUsd[msg.sender] = dailyBorrowLimitUsd;
         } else {

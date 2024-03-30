@@ -232,6 +232,7 @@ contract Core {
             uint prevCapUsd = collateralsData[collateral].prevCapUsd;
             uint currentWeight = capUsdTimeElapsed;
             uint prevWeight = 7 days - currentWeight;
+            // calculate weighted average based on time elapsed, the more time elapsed, the more weight to new value
             capUsd = (prevCapUsd * prevWeight + capUsd * currentWeight) / 7 days;
         }
         return capUsd;
@@ -244,6 +245,7 @@ contract Core {
             uint prevCollateralFactor = collateralsData[collateral].prevCollateralFactor;
             uint currentWeight = collateralFactorTimeElapsed;
             uint prevWeight = 7 days - currentWeight;
+            // calculate weighted average based on time elapsed, the more time elapsed, the more weight to new value
             collateralFactorBps = (prevCollateralFactor * prevWeight + collateralFactorBps * currentWeight) / 7 days;
         }
         return collateralFactorBps;
@@ -277,7 +279,7 @@ contract Core {
             collateral.totalAssets(),
             capUsd
             );
-        // enforce both caps
+        // enforce cap
         uint totalCollateralAfter = collateral.totalAssets() + amount;
         uint totalValueAfter = totalCollateralAfter * price / MANTISSA;
         require(totalValueAfter < capUsd, "capExceeded");
@@ -318,6 +320,7 @@ contract Core {
                 );
                 uint thisCollateralBalance = thisCollateral.getCollateralOf(caller);
                 if(thisCollateral == collateral) thisCollateralBalance -= amount;
+                // apply collateral factor before adding to assets
                 uint thisCollateralUsd = thisCollateralBalance * collateralFactorBps * price / 10000 / MANTISSA;
                 assetsUsd += thisCollateralUsd;
             }
@@ -389,6 +392,7 @@ contract Core {
                 capUsd
             );
             uint thisCollateralBalance = thisCollateral.getCollateralOf(caller);
+            // apply collateral factor before adding to assets
             uint thisCollateralUsd = thisCollateralBalance * collateralFactorBps * price / 10000 / MANTISSA;
             assetsUsd += thisCollateralUsd;
         }
@@ -485,6 +489,7 @@ contract Core {
                         uint debt = thisPool.getDebtOf(borrower);
                         uint price = oracle.getDebtPriceMantissa(thisPool.asset());
                         uint debtUsd = debt * price / MANTISSA;
+                        // only the pool with the most debt can be repaid
                         require(debtUsd <= poolDebtUsd, "notMostDebtPool");
                         liabilitiesUsd += debtUsd;
                     }
@@ -515,8 +520,10 @@ contract Core {
                     uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
                     uint thisCollateralUsd = thisCollateralBalance * price / MANTISSA;
                     if(thisCollateral != collateral) {
+                        // only the most valuable collateral can be seized
                         require(thisCollateralUsd <= collateralBalanceUsd, "notMostValuableCollateral");
                     }
+                    // apply collateral factor before adding to assets
                     assetsUsd += thisCollateralUsd * collateralFactorBps / 10000;
                 }
             }
@@ -534,6 +541,7 @@ contract Core {
                 getCapUsd(collateral)
             );
             uint collateralAmount = debtValue * MANTISSA / collateralPrice;
+            // add an incentive for the liquidator as an additional percentage of the collateral amount
             uint collateralIncentive = collateralAmount * liquidationIncentiveBps / 10000;
             uint collateralIncentiveUsd = collateralIncentive * collateralPrice / MANTISSA;
             uint collateralReward = collateralAmount + collateralIncentive;
@@ -598,6 +606,7 @@ contract Core {
             );
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             uint thisCollateralUsd = thisCollateralBalance * price / MANTISSA;
+            // check if collateral balance is below bad debt threshold, otherwise we wait for more liquidations to occur
             require(thisCollateralUsd < badDebtCollateralThresholdUsd, "collateralBalanceTooHigh");
             assetsUsd += thisCollateralUsd;
         }
@@ -616,6 +625,7 @@ contract Core {
         for (uint i = 0; i < userCollaterals[borrower].length; i++) {
             ICollateral thisCollateral = userCollaterals[borrower][i];
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
+            // calculate reward as a percentage of the collateral balance to incentivize the caller
             uint reward = thisCollateralBalance * writeOffIncentiveBps / 10000;
             uint fee = thisCollateralBalance - reward;
             if(fee > 0) thisCollateral.seize(borrower, fee, feeDestination);

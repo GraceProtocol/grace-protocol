@@ -22,8 +22,10 @@ contract RateModel {
 
     function getTargetRate(uint util) public view returns (uint) {
         if(util < KINK_BPS) {
+            // if util is below kink, rate grows linearly between MIN_RATE and KINK_RATE
             return MIN_RATE + util * (KINK_RATE - MIN_RATE) / KINK_BPS;
         } else {
+            // if util is above kink, rate grows linearly between KINK_RATE and MAX_RATE
             return KINK_RATE + (util - KINK_BPS) * (MAX_RATE - KINK_RATE) / (10000 - KINK_BPS);
         }
     }
@@ -32,6 +34,7 @@ contract RateModel {
         uint curveRate = getTargetRate(util);
         uint timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return lastRate;
+        // we cap the rate of change per day at BPS_PER_DAY to reduce rate volatility
         uint maxChange = BPS_PER_DAY * timeElapsed / 1 days;
         if(curveRate > lastRate) { // rising
             return maxChange < curveRate - lastRate ? lastRate + maxChange : curveRate;

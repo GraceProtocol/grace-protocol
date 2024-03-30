@@ -82,14 +82,19 @@ contract Collateral {
     function accrueFee() internal returns (uint _lastAccrued) {
         _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - lastAccrued;
+        // if timeElapsed is 0, it means that the fee has already been accrued for the current block
         if(timeElapsed == 0) return _lastAccrued;
+        // skip interest accrual if the collateral rate is 0
         if(lastFeeBps == 0) {
             lastAccrued = block.timestamp;
             return _lastAccrued;
         }
         uint balance = lastBalance;
+        // fee is in bps per year, timeElapsed is in seconds
         uint256 fee = balance * lastFeeBps * timeElapsed / 10000 / 365 days;
+        // avoid underflow
         if(fee > balance) fee = balance;
+        // enforce minimum balance in the contract
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
         if(fee == 0) return _lastAccrued;
         lastAccrued = block.timestamp;
@@ -105,13 +110,17 @@ contract Collateral {
     }
 
     function totalAssets() public view returns (uint256) {
+        // accrue fee if needed, same as in accrueFee()
         uint256 timeElapsed = block.timestamp - lastAccrued;
         if(timeElapsed == 0) return lastBalance;
         uint feeBps = lastFeeBps;
         if(feeBps == 0) return lastBalance;
         uint balance = lastBalance;
+        // fee is in bps per year, timeElapsed is in seconds
         uint256 fee = balance * feeBps * timeElapsed / 10000 / 365 days;
+        // avoid underflow
         if(fee > balance) fee = balance;
+        // enforce minimum balance in the contract
         if(balance - fee < MINIMUM_BALANCE) fee = balance > MINIMUM_BALANCE ? balance - MINIMUM_BALANCE : 0;
         return balance - fee;
     }

@@ -60,7 +60,9 @@ contract Vault {
 
     function updateIndex(address user) internal {
         uint deltaT = block.timestamp - lastUpdate;
+        // if deltaT is 0, no need to update
         if(deltaT > 0) {
+            // if totalSupply is 0, skip but update lastUpdate
             if(totalSupply > 0) {
                 uint rewardsAccrued = factory.claim();
                 rewardIndexMantissa += rewardsAccrued * MANTISSA / totalSupply;
@@ -68,10 +70,12 @@ contract Vault {
             lastUpdate = block.timestamp;
         }
 
+        // accrue rewards for user
         uint deltaIndex = rewardIndexMantissa - accountIndexMantissa[user];
         uint bal = balanceOf[user];
         uint accountDelta = bal * deltaIndex;
         accountIndexMantissa[user] = rewardIndexMantissa;
+        // divide by MANTISSA because rewardIndexMantissa is scaled by MANTISSA
         accruedRewards[user] += accountDelta / MANTISSA;
     }
 

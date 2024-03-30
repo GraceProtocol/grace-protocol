@@ -110,35 +110,50 @@ contract Pool {
     function accrueInterest() internal returns (uint _lastAccrued) {
         _lastAccrued = lastAccrued;
         uint256 timeElapsed = block.timestamp - _lastAccrued;
+        // if timeElapsed is 0, it means that the interest has already been accrued for the current block
         if(timeElapsed == 0) return _lastAccrued;
+        // skip interest accrual if the borrow rate is 0
         if(lastBorrowRate == 0) {
             lastAccrued = block.timestamp;
             return _lastAccrued;
         }
+        // borrow rate is in basis points, timeElapsed is in seconds
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = convertToShares(interest);
+        // if shares is 0, it means that the interest is too small to be accrued
         if(shares == 0) return _lastAccrued;
         lastAccrued = block.timestamp;
         totalDebt += interest;
         totalSupply += shares;
         address borrowRateDestination = core.feeDestination();
+        // before minting the interest to the fee recipient, we need to deduct the referrer rewards
         uint referrersReward;
+        // skip referrer rewards if there are no referrers or if the debt supply is 0 to avoid division by zero
         if(totalReferrerShares > 0 && debtSupply > 0) {
+            // only deduct REF_FEE_BPS from the portion of interest that has a referrer
+            // e.g. if 50% of users have a referrer, then REF_FEE_BPS should be deducted from 50% of the interest
+            // if no users have a referrer, then the full interest is minted to the fee recipient
             referrersReward = shares * totalReferrerShares * REF_FEE_BPS / debtSupply / 10000;
+            // temporarily mint the referrer rewards to the pool in the form of shares for referrers to claim
             balanceOf[address(this)] += referrersReward;
             emit Transfer(address(0), address(this), referrersReward);
+            // update the reward index for referrers
             rewardIndexMantissa += referrersReward * MANTISSA / totalReferrerShares;
         }
+        // deduct the referrer rewards from the interest
         uint fee = referrersReward > shares ? 0 : shares - referrersReward;
+        // mint the interest to the fee recipient
         balanceOf[borrowRateDestination] += fee;
         emit Transfer(address(0), borrowRateDestination, fee);
     }
 
     function updateReferrer(address referrer) internal {
+        // deltaIndex is the difference between the current reward index and the last reward index for the referrer
         uint deltaIndex = rewardIndexMantissa - referrerIndexMantissa[referrer];
         uint bal = referrerShares[referrer];
         uint referrerDelta = bal * deltaIndex;
         referrerIndexMantissa[referrer] = rewardIndexMantissa;
+        // divide by MANTISSA because rewardIndexMantissa is scaled by MANTISSA
         accruedReferrerRewards[referrer] += referrerDelta / MANTISSA;
     }
 
@@ -616,12 +631,17 @@ contract Pool {
     }
 
     function getDebtOf(address account) public view returns (uint) {
+        // accrue interest to the current block, same as accrueInterest()
         if(debtSupply == 0) return 0;
         uint256 timeElapsed = block.timestamp - lastAccrued;
+        // if timeElapsed is 0, it means that the interest has already been accrued for the current block
         if(timeElapsed == 0) return convertToDebtAssets(debtSharesOf[account]);
+        // lastBorrowRate is in basis points, timeElapsed is in seconds
         uint256 interest = totalDebt * lastBorrowRate * timeElapsed / 10000 / 365 days;
         uint shares = convertToDebtShares(interest);
+        // if shares is 0, it means that the interest is too small to be accrued
         if(shares == 0) return convertToDebtAssets(debtSharesOf[account]);
+        // we use mulDivUp to round down the debt shares
         return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply);
     }
 

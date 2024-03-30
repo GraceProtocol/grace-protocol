@@ -76,13 +76,16 @@ contract Reserve {
         gtr.transferFrom(msg.sender, address(this), gtrAmount);
         uint totalSupply = gtr.totalSupply();
         gtr.burn(gtrAmount);
+        // calculate the user's share of the GTR supply
         uint shareMantissa = gtrAmount * MANTISSA / totalSupply;
         for(uint i = 0; i < tokens.length; i++) {
+            // check for duplicate tokens
             for(uint j = i + 1; j < tokens.length; j++) {
                 require(tokens[i] != tokens[j], "duplicate token");
             }
             uint balance = tokens[i].balanceOf(address(this));
             require(balance > 0, "zeroBalance");
+            // calculate the user's share of the token balance
             uint out = balance * shareMantissa / MANTISSA;
             tokens[i].safeTransfer(msg.sender, out);
         }

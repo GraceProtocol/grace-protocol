@@ -67,8 +67,11 @@ contract Oracle {
         if(low.price == 0 || price < low.price) {
             return price;
         } else {
+            // ramp up low price to current price at a fixed bps per week
             uint change = low.price * (block.timestamp - low.timestamp) * bpsPerWeek / 10000 / WEEK;
-            if (change > low.price * bpsPerWeek / 10000) change = low.price * bpsPerWeek / 10000; // cap change per update to bpsPerWeek
+            // cap change per update to bpsPerWeek to avoid large price jumps
+            if (change > low.price * bpsPerWeek / 10000) change = low.price * bpsPerWeek / 10000;
+            // avoid integer underflow
             if(price < low.price + change) {
                 return price;
             } else {
@@ -83,9 +86,12 @@ contract Oracle {
         if(price > high.price) {
             return price;
         } else {
+            // ramp down high price to current price at a fixed bps per week
             uint change = high.price * (block.timestamp - high.timestamp) * bpsPerWeek / 10000 / WEEK;
-            if (change > high.price * bpsPerWeek / 10000) change = high.price * bpsPerWeek / 10000; // cap change per update to bpsPerWeek
-            if (change > high.price) change = high.price; // integer underflow protection
+            // cap change per update to bpsPerWeek to avoid large price jumps
+            if (change > high.price * bpsPerWeek / 10000) change = high.price * bpsPerWeek / 10000;
+            // avoid integer underflow
+            if (change > high.price) change = high.price;
             if(price > high.price - change) {
                 return price;
             } else {
@@ -98,6 +104,7 @@ contract Oracle {
         address feed = collateralFeeds[token];
         if(feed != address(0)) {
             uint low = getCollateralLow(msg.sender, token);
+            // if low price is updated, record it
             if(low != collateralLows[msg.sender][token].price) {
                 collateralLows[msg.sender][token] = PriceLog(low, block.timestamp);
                 emit RecordCollateralLow(msg.sender, token, low);
@@ -107,7 +114,9 @@ contract Oracle {
             if(collateralFactorBps == 0) return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
+            // if new borrowing power is higher than low price, dampen price
             if(low > 0 && newBorrowingPower > low) {
+                // dampen price where new borrowing power equals the low price
                 uint dampenedPrice = low * 10000 / collateralFactorBps;
                 uint unCappedPrice = dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
                 return getCappedPrice(unCappedPrice, totalCollateral, capUsd);
@@ -140,7 +149,9 @@ contract Oracle {
             if(collateralFactorBps == 0) return getCappedPrice(normalizedPrice, totalCollateral, capUsd);
             // calculate new borrowing power based on collateral factor
             uint newBorrowingPower = normalizedPrice * collateralFactorBps / 10000;
+            // if new borrowing power is higher than low price, dampen price
             if(low > 0 && newBorrowingPower > low) {
+                // dampen price where new borrowing power equals the low price
                 uint dampenedPrice = low * 10000 / collateralFactorBps;
                 uint unCappedPrice = dampenedPrice < normalizedPrice ? dampenedPrice: normalizedPrice;
                 return getCappedPrice(unCappedPrice, totalCollateral, capUsd);

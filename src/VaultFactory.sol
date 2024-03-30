@@ -38,10 +38,14 @@ contract VaultFactory {
 
     function updateIndex(address vault) internal {
         uint deltaT = block.timestamp - lastUpdate;
+        // if deltaT is 0, no need to update
         if(deltaT > 0) {          
+            // if there's no reward budget or no supply, no need to update but still update lastUpdate
             if(rewardBudget > 0 && totalSupply > 0) {
                 uint rewardsAccrued = deltaT * rewardBudget / 365 days;  
+                // check that this contract has enough mint allowance before minting
                 uint mintAllowance = gtr.minters(address(this));
+                // if rewardsAccrued is greater than mint allowance, mint only mint allowance
                 rewardsAccrued = rewardsAccrued > mintAllowance ? mintAllowance : rewardsAccrued;
                 rewardIndexMantissa += rewardsAccrued * MANTISSA / totalSupply;
                 gtr.mint(address(this), rewardsAccrued);
@@ -49,6 +53,7 @@ contract VaultFactory {
             lastUpdate = block.timestamp;
         }
 
+        // update vault index
         uint deltaIndex = rewardIndexMantissa - vaultIndexMantissa[vault];
         uint bal = balanceOf[vault];
         uint vaultDelta = bal * deltaIndex;
@@ -100,6 +105,7 @@ contract VaultFactory {
     }
 
     function claimable(address vault) public view returns(uint) {
+        // emulates the updateIndex function
         uint deltaT = block.timestamp - lastUpdate;
         uint rewardsAccrued = deltaT * rewardBudget / 365 days;
         uint mintAllowance = gtr.minters(address(this));
