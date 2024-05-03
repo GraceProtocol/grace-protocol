@@ -394,6 +394,10 @@ contract GTR {
         balances[msg.sender] = sub96(balances[msg.sender], amount, "GTR::burn: burn amount exceeds balance");
         totalSupply = safe96(totalSupply - amount, "GTR::burn: burn amount exceeds totalSupply");
         emit Transfer(msg.sender, address(0), amount);
+
+        // move delegates
+        _moveDelegates(delegates[msg.sender], address(0), amount);
+
         return true;
     }
 
