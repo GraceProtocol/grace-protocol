@@ -129,7 +129,8 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         IWETH(address(asset)).withdraw(amount);
-        recipient.call{value: amount}("");
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Transfer failed.");
     }
 
     function withdrawETH(uint amount) external onlyWETH {

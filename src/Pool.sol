@@ -510,7 +510,8 @@ contract Pool {
         emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
-        payable(msg.sender).call{value: amount}("");
+        (bool success,) = msg.sender.call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 
     function borrowETH(uint256 amount, address referrer) public {
@@ -576,7 +577,8 @@ contract Pool {
         emit Repay(to, amount, debtShares);
         updateBorrowRate(_lastAccrued);
         if(refund > 0) {
-            payable(msg.sender).call{value: refund}("");
+            (bool success,) = msg.sender.call{value: refund}("");
+            require(success, "ETH transfer failed");
         }
     }
 

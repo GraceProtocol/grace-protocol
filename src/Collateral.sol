@@ -299,7 +299,8 @@ contract Collateral {
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
-        receiver.call{value: assets}("");
+        (bool success, ) = receiver.call{value: assets}("");
+        require(success, "ETH transfer failed");
     }
 
     function withdrawETH(uint256 assets) public returns (uint256 shares) {
@@ -344,7 +345,8 @@ contract Collateral {
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
-        receiver.call{value: assets}("");
+        (bool success, ) = receiver.call{value: assets}("");
+        require(success, "ETH transfer failed");
     }
 
     function redeemETH(uint256 shares) public returns (uint256 assets) {
