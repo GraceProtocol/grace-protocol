@@ -129,7 +129,7 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         IWETH(address(asset)).withdraw(amount);
-        recipient.transfer(amount);
+        recipient.call{value: amount}("");
     }
 
     function withdrawETH(uint amount) external onlyWETH {
