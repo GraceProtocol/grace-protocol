@@ -296,7 +296,8 @@ contract Core {
 
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < borrowerPools[caller].length; i++) {
+        uint borrowerPoolsLength = borrowerPools[caller].length;
+        for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool pool = borrowerPools[caller][i];
             uint debt = pool.getDebtOf(caller);
             uint price = oracle.getDebtPriceMantissa(pool.asset());
@@ -306,9 +307,10 @@ contract Core {
 
         // calculate assets
         uint assetsUsd = 0;
+        uint userCollateralsLength = userCollaterals[caller].length;
         // if liabilities == 0, skip assets check to save gas
         if(liabilitiesUsd > 0) {
-            for (uint i = 0; i < userCollaterals[caller].length; i++) {
+            for (uint i = 0; i < userCollateralsLength; i++) {
                 ICollateral thisCollateral = userCollaterals[caller][i];
                 uint capUsd = getCapUsd(thisCollateral);
                 uint collateralFactorBps = getCollateralFactor(thisCollateral);
@@ -331,9 +333,9 @@ contract Core {
 
         // if user withdraws full collateral, remove from userCollaterals and collateralUsers
         if(amount == collateral.getCollateralOf(caller)) {
-            for (uint i = 0; i < userCollaterals[caller].length; i++) {
+            for (uint i = 0; i < userCollateralsLength; i++) {
                 if(userCollaterals[caller][i] == collateral) {
-                    userCollaterals[caller][i] = userCollaterals[caller][userCollaterals[caller].length - 1];
+                    userCollaterals[caller][i] = userCollaterals[caller][userCollateralsLength - 1];
                     userCollaterals[caller].pop();
                     break;
                 }
@@ -381,7 +383,8 @@ contract Core {
 
         // calculate assets
         uint assetsUsd = 0;
-        for (uint i = 0; i < userCollaterals[caller].length; i++) {
+        uint userCollateralsLength = userCollaterals[caller].length;
+        for (uint i = 0; i < userCollateralsLength; i++) {
             ICollateral thisCollateral = userCollaterals[caller][i];
             uint capUsd = getCapUsd(thisCollateral);
             uint collateralFactorBps = getCollateralFactor(thisCollateral);
@@ -399,7 +402,8 @@ contract Core {
 
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < borrowerPools[caller].length; i++) {
+        uint borrowerPoolsLength = borrowerPools[caller].length;
+        for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool thisPool = borrowerPools[caller][i];
             uint debt = thisPool.getDebtOf(caller);
             if(thisPool == pool) debt += amount;
@@ -427,9 +431,10 @@ contract Core {
 
         // if user repays all, remove from borrowerPools and poolBorrowers
         if(amount == debt) {
-            for (uint i = 0; i < borrowerPools[recipient].length; i++) {
+            uint borrowerPoolsLength = borrowerPools[recipient].length;
+            for (uint i = 0; i < borrowerPoolsLength; i++) {
                 if(borrowerPools[recipient][i] == pool) {
-                    borrowerPools[recipient][i] = borrowerPools[recipient][borrowerPools[recipient].length - 1];
+                    borrowerPools[recipient][i] = borrowerPools[recipient][borrowerPoolsLength - 1];
                     borrowerPools[recipient].pop();
                     break;
                 }
@@ -483,7 +488,8 @@ contract Core {
                 uint poolDebtUsd = pool.getDebtOf(borrower) * oracle.getDebtPriceMantissa(pool.asset()) / MANTISSA;
                 // calculate liabilities
                 liabilitiesUsd = poolDebtUsd;
-                for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+                uint borrowerPoolsLength = borrowerPools[borrower].length;
+                for (uint i = 0; i < borrowerPoolsLength; i++) {
                     IPool thisPool = borrowerPools[borrower][i];
                     if (thisPool != pool) {
                         uint debt = thisPool.getDebtOf(borrower);
@@ -507,7 +513,8 @@ contract Core {
                     getCapUsd(collateral)
                 ) / MANTISSA;
 
-                for (uint i = 0; i < userCollaterals[borrower].length; i++) {
+                uint userCollateralsLength = userCollaterals[borrower].length;
+                for (uint i = 0; i < userCollateralsLength; i++) {
                     ICollateral thisCollateral = userCollaterals[borrower][i];
                     uint capUsd = getCapUsd(thisCollateral);
                     uint collateralFactorBps = getCollateralFactor(thisCollateral);
@@ -568,9 +575,10 @@ contract Core {
 
         if(collateral.getCollateralOf(borrower) == 0) {
             // remove from userCollaterals and collateralUsers
-            for (uint i = 0; i < userCollaterals[borrower].length; i++) {
+            uint userCollateralsLength = userCollaterals[borrower].length;
+            for (uint i = 0; i < userCollateralsLength; i++) {
                 if(userCollaterals[borrower][i] == collateral) {
-                    userCollaterals[borrower][i] = userCollaterals[borrower][userCollaterals[borrower].length - 1];
+                    userCollaterals[borrower][i] = userCollaterals[borrower][userCollateralsLength - 1];
                     userCollaterals[borrower].pop();
                     break;
                 }
@@ -583,7 +591,8 @@ contract Core {
     function writeOff(address borrower) public lock {
         // calculate liabilities
         uint liabilitiesUsd = 0;
-        for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+        uint borrowerPoolsLength = borrowerPools[borrower].length;
+        for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool thisPool = borrowerPools[borrower][i];
             uint debt = thisPool.getDebtOf(borrower);
             uint price = oracle.getDebtPriceMantissa(thisPool.asset());
@@ -595,7 +604,8 @@ contract Core {
 
         // calculate assets, without applying collateral factor
         uint assetsUsd = 0;
-        for (uint i = 0; i < userCollaterals[borrower].length; i++) {
+        uint userCollateralsLength = userCollaterals[borrower].length;
+        for (uint i = 0; i < userCollateralsLength; i++) {
             ICollateral thisCollateral = userCollaterals[borrower][i];
             uint capUsd = getCapUsd(thisCollateral);
             uint price = oracle.getCollateralPriceMantissa(
@@ -614,7 +624,7 @@ contract Core {
         require(assetsUsd < liabilitiesUsd, "insufficientLiabilities");
 
         // write off
-        for (uint i = 0; i < borrowerPools[borrower].length; i++) {
+        for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool thisPool = borrowerPools[borrower][i];
             thisPool.writeOff(borrower);
             poolBorrowers[thisPool][borrower] = false;
@@ -622,7 +632,7 @@ contract Core {
         delete borrowerPools[borrower];
 
         // seize
-        for (uint i = 0; i < userCollaterals[borrower].length; i++) {
+        for (uint i = 0; i < userCollateralsLength; i++) {
             ICollateral thisCollateral = userCollaterals[borrower][i];
             uint thisCollateralBalance = thisCollateral.getCollateralOf(borrower);
             // calculate reward as a percentage of the collateral balance to incentivize the caller
