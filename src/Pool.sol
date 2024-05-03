@@ -2,6 +2,7 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface IPoolCore {
     function feeDestination() external view returns (address);
@@ -22,6 +23,7 @@ interface IWETH {
 contract Pool {
 
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     struct WriteOffEvent {
         uint timestamp;
@@ -413,7 +415,7 @@ contract Pool {
                 keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
@@ -428,7 +430,7 @@ contract Pool {
                 keccak256(abi.encode(PERMIT_BORROW_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
         borrowAllowance[owner][spender] = value;
         emit BorrowApproval(owner, spender, value);

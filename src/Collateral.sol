@@ -2,6 +2,7 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface ICollateralCore {
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
@@ -20,6 +21,7 @@ interface IWETH is IERC20 {
 contract Collateral {
 
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     struct SeizeEvent {
         uint timestamp;
@@ -368,7 +370,7 @@ contract Collateral {
                 keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, shares, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, "Collateral: INVALID_SIGNATURE");
         allowance[owner][spender] = shares;
         emit Approval(owner, spender, shares);
