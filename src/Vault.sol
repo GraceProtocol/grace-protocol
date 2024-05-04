@@ -31,6 +31,7 @@ contract Vault {
     uint public lastUpdate;
     uint public rewardIndexMantissa;
     uint public totalSupply;
+    uint256 private locked = 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
     mapping(address => uint) public balanceOf;
     mapping(address => uint) public nonces;    
@@ -54,6 +55,16 @@ contract Vault {
     modifier onlyWETH() {
         require(isWETH, "onlyWETH");
         _;
+    }
+
+    modifier nonReentrant() virtual {
+        require(locked == 1, "REENTRANCY");
+
+        locked = 2;
+
+        _;
+
+        locked = 1;
     }
 
     receive() external payable {}
@@ -94,7 +105,7 @@ contract Vault {
         depositShares(amount, msg.sender);
     }
 
-    function depositAsset(uint amount, address recipient) public {
+    function depositAsset(uint amount, address recipient) public nonReentrant {
         updateIndex(recipient);
         asset.safeTransferFrom(msg.sender, address(this), amount);
         uint shares = pool.deposit(amount);
