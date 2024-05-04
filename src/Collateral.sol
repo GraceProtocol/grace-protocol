@@ -311,7 +311,8 @@ contract Collateral {
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
-        assets = previewRedeem(shares);
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -333,7 +334,8 @@ contract Collateral {
 
     function redeemETH(uint256 shares, address payable receiver, address owner) public onlyWETH lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
-        assets = previewRedeem(shares);
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -389,6 +391,7 @@ contract Collateral {
         require(msg.sender == address(core), "onlyCore");
         if(assets == type(uint).max) assets = getCollateralOf(account);
         uint shares = convertToShares(assets);
+        require(shares > 0, "zeroShares");
         totalSupply -= shares;
         balanceOf[account] -= shares;
         asset.safeTransfer(to, assets);
