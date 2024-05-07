@@ -99,6 +99,7 @@ contract Vault {
         balanceOf[recipient] += amount;
         totalSupply += amount;
         pool.transferFrom(msg.sender, address(this), amount);
+        emit Deposit(msg.sender, recipient, amount);
     }
 
     function depositShares(uint amount) external {
@@ -111,6 +112,7 @@ contract Vault {
         uint shares = pool.deposit(amount);
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        emit Deposit(msg.sender, recipient, shares);
     }
 
     function depositAsset(uint amount) external {
@@ -123,6 +125,7 @@ contract Vault {
         uint shares = pool.deposit(msg.value);
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        emit Deposit(msg.sender, recipient, shares);
     }
 
     function depositETH() external payable onlyWETH {
@@ -140,6 +143,7 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         IWETH(address(asset)).withdraw(amount);
+        emit Withdraw(msg.sender, recipient, owner, shares);
         (bool success, ) = recipient.call{value: amount}("");
         require(success, "Transfer failed.");
     }
@@ -158,6 +162,7 @@ contract Vault {
         balanceOf[owner] -= amount;
         totalSupply -= amount;
         pool.transfer(recipient, amount);
+        emit Withdraw(msg.sender, recipient, owner, amount);
     }
 
     function withdrawShares(uint amount) external {
@@ -175,6 +180,7 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         asset.safeTransfer(recipient, amount);
+        emit Withdraw(msg.sender, recipient, owner, shares);
     }
 
     function withdrawAsset(uint amount) external {
