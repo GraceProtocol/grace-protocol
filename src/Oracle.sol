@@ -41,9 +41,35 @@ contract Oracle {
     function setPoolFixedPrice(address token, uint price) onlyOwner external { poolFixedPrices[token] = price; }
     function setBpsPerWeek(uint _bpsPerWeek) onlyOwner external { bpsPerWeek = _bpsPerWeek; }
 
+    function getFeedPrice(address feed) public view returns (uint) {
+        uint passedGas = gasleft() > 5_000_000 ? 5_000_000 : gasleft(); // protect against out of gas reverts
+        try IChainlinkFeed(feed).latestRoundData{gas: passedGas}() returns (uint80, int256 price, uint256, uint256, uint80) {
+            return price < 0 ? 0 : uint(price);
+        } catch {
+            return 0;
+        }
+    }
+
+    function isDebtPriceFeedValid(address token) external view returns (bool) {
+        // it's ok to call getFeedPrice internally as this function is allowed to fail if feed is invalid
+        return poolFixedPrices[token] > 0 || getFeedPrice(poolFeeds[token]) > 0;
+    }
+
+    function isCollateralPriceFeedValid(address token) external view returns (bool) {
+        // it's ok to call getFeedPrice internally as this function is allowed to fail if feed is invalid
+        return getFeedPrice(collateralFeeds[token]) > 0;
+    }
+
     function getNormalizedPrice(address token, address feed) internal view returns (uint normalizedPrice) {
-        (,int256 signedPrice,,,) = IChainlinkFeed(feed).latestRoundData();
-        uint256 price = signedPrice < 0 ? 0 : uint256(signedPrice);
+        // we call getPriceFeed on the same contract externally to catch any reverts
+        // we don't call the feed directly in this function to catch reverts within getFeedPrice function in case feed contract
+        // is selfdestructed or doesn't return expected values which would otherwise revert the whole transaction despite the try/catch
+        uint price;
+        try Oracle(this).getFeedPrice(feed) returns (uint _price) {
+            price = _price;
+        } catch {
+            return 0;
+        }
         uint8 feedDecimals = IChainlinkFeed(feed).decimals();
         uint8 tokenDecimals = IOracleERC20(token).decimals();
         if(feedDecimals + tokenDecimals <= 36) {

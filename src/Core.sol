@@ -21,6 +21,7 @@ interface IOracle {
     function getDebtPriceMantissa(address token) external returns (uint256);
     function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256);
     function viewDebtPriceMantissa(address caller, address token) external view returns (uint256);
+    function isDebtPriceFeedValid(address token) external view returns (bool);
 }
 
 interface IRateProvider {
@@ -299,6 +300,8 @@ contract Core {
         uint borrowerPoolsLength = borrowerPools[caller].length;
         for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool pool = borrowerPools[caller][i];
+            // borrower must repay any debt with invalid price feeds before withdrawing any collateral
+            require(oracle.isDebtPriceFeedValid(pool.asset()), "invalidPriceFeed");
             uint debt = pool.getDebtOf(caller);
             uint price = oracle.getDebtPriceMantissa(pool.asset());
             uint debtUsd = debt * price / MANTISSA;
@@ -405,6 +408,8 @@ contract Core {
         uint borrowerPoolsLength = borrowerPools[caller].length;
         for (uint i = 0; i < borrowerPoolsLength; i++) {
             IPool thisPool = borrowerPools[caller][i];
+            // borrower must repay any debt with invalid price feeds before borrowing more
+            require(oracle.isDebtPriceFeedValid(thisPool.asset()), "invalidPriceFeed");
             uint debt = thisPool.getDebtOf(caller);
             if(thisPool == pool) debt += amount;
             uint price = oracle.getDebtPriceMantissa(thisPool.asset());
