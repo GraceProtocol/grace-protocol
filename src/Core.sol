@@ -22,6 +22,7 @@ interface IOracle {
     function viewCollateralPriceMantissa(address caller, address token, uint collateralFactorBps, uint totalCollateral, uint capUsd) external view returns (uint256);
     function viewDebtPriceMantissa(address caller, address token) external view returns (uint256);
     function isDebtPriceFeedValid(address token) external view returns (bool);
+    function isCollateralPriceFeedValid(address token) external view returns (bool);
 }
 
 interface IRateProvider {
@@ -170,6 +171,7 @@ contract Core {
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
+        require(oracle.isDebtPriceFeedValid(underlying));
         bool isWETH = underlying == WETH;
         IPool pool = IPool(poolDeployer.deployPool(name, symbol, underlying, isWETH));
         poolsData[pool] = PoolConfig({
@@ -195,6 +197,7 @@ contract Core {
         uint size;
         assembly { size := extcodesize(underlying) }
         require(size > 0, "invalidUnderlying");
+        require(oracle.isCollateralPriceFeedValid(underlying));
         bool isWETH = underlying == WETH;
         ICollateral collateral = ICollateral(collateralDeployer.deployCollateral(underlying, isWETH));
         collateralsData[collateral] = CollateralConfig({
