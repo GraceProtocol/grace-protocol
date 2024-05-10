@@ -664,12 +664,6 @@ contract Core {
         collateral.pull(token, dst, amount);
     }
 
-    /// @notice Reset the lock counter in case of emergency
-    function resetLock() public {
-        require(msg.sender == tx.origin, "onlyExternals");
-        lockDepth = 0;
-    }
-
     event DeployCollateral(address indexed collateral);
     event DeployPool(address indexed pool);
     event Liquidate(address indexed borrower, address indexed pool, address indexed collateral, uint debtAmount, uint collateralReward);
