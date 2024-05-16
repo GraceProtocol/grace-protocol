@@ -36,8 +36,14 @@ contract Oracle {
     }
 
     function setOwner(address _owner) external onlyOwner { owner = _owner; }
-    function setCollateralFeed(address token, address feed) onlyOwner external { collateralFeeds[token] = feed; }
-    function setPoolFeed(address token, address feed) onlyOwner external { poolFeeds[token] = feed; }
+    function setCollateralFeed(address token, address feed) onlyOwner external {
+        require(feed != address(0), "invalid feed");
+        collateralFeeds[token] = feed;
+    }
+    function setPoolFeed(address token, address feed) onlyOwner external {
+        require(feed != address(0), "invalid feed");
+        poolFeeds[token] = feed;
+    }
     function setPoolFixedPrice(address token, uint price) onlyOwner external { poolFixedPrices[token] = price; }
     function setBpsPerWeek(uint _bpsPerWeek) onlyOwner external { bpsPerWeek = _bpsPerWeek; }
 
