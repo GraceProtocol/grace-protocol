@@ -21,6 +21,9 @@ interface IERC20Metadata {
 }
 
 contract SepoliaDeployerScript is Script {
+
+    address deployer; // avoid stack too deep error
+
     function setUp() public {}
 
     function run() public {
@@ -28,7 +31,8 @@ contract SepoliaDeployerScript is Script {
             Setup
         */
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
+        deployer = vm.addr(deployerPrivateKey);
+        require(deployer != address(0), "deployer address is 0x0");
         vm.startBroadcast(deployerPrivateKey);
 
         /*
@@ -41,7 +45,7 @@ contract SepoliaDeployerScript is Script {
         BorrowController borrowController = new BorrowController();
         RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
         new Lens();
-        // WETH address used on Arbitrum Sepolia
+        // WETH address used on Base Sepolia
         address weth = 0x4200000000000000000000000000000000000006;
 
         /*
@@ -98,10 +102,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(Dola)).setSymbol("DOLA");
         ERC20(payable(Dola)).mint(deployer, 1_000_000 * 1e18);
         deployPool(core, vaultFactory, Dola, address(0), 1e18, 10_000_000 * 1e18);
-        
-        
-        address _deployer = deployer; // avoid stack too deep error
-        
+                
         /*
             Deploy USDC pool and vault
         */
@@ -109,7 +110,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(USDC)).setName("USDC");
         ERC20(payable(USDC)).setSymbol("USDC");
         ERC20(payable(USDC)).setDecimals(6);
-        ERC20(payable(USDC)).mint(_deployer, 1_000_000 * 1e6);
+        ERC20(payable(USDC)).mint(deployer, 1_000_000 * 1e6);
         deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10_000_000 * 1e6);
 
         /*
@@ -119,7 +120,7 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(WBTC)).setName("WBTC");
         ERC20(payable(WBTC)).setSymbol("WBTC");
         ERC20(payable(WBTC)).setDecimals(8);
-        ERC20(payable(WBTC)).mint(_deployer, 1_000_000 * 1e8);
+        ERC20(payable(WBTC)).mint(deployer, 1_000_000 * 1e8);
         address wbtcFeed = 0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298;
         deployPool(core, vaultFactory, WBTC, wbtcFeed, 0, 10_000_000 * 1e8);
 
