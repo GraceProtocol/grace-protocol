@@ -88,6 +88,14 @@ contract MockOracle {
         }
         return debtPrice;
     }
+
+    function isDebtPriceFeedValid(address token) external view returns (bool) {
+        return true;
+    }
+
+    function isCollateralPriceFeedValid(address token) external view returns (bool) {
+        return true;
+    }
 }
 
 contract MockWETH is ERC20 {
@@ -1167,16 +1175,6 @@ contract CoreTest is Test {
 
         vm.expectRevert("collateralBalanceTooHigh");
         core.writeOff(address(this));
-    }
-
-    function test_resetLockContract() public {
-        vm.expectRevert("onlyExternals");
-        core.resetLock();
-    }
-
-    function test_resetLockExternal() public {
-        vm.prank(tx.origin);
-        core.resetLock();
     }
 
 }

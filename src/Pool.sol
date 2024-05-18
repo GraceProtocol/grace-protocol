@@ -2,6 +2,7 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface IPoolCore {
     function feeDestination() external view returns (address);
@@ -22,6 +23,7 @@ interface IWETH {
 contract Pool {
 
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     struct WriteOffEvent {
         uint timestamp;
@@ -413,7 +415,7 @@ contract Pool {
                 keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
@@ -428,7 +430,7 @@ contract Pool {
                 keccak256(abi.encode(PERMIT_BORROW_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, 'Pool: INVALID_SIGNATURE');
         borrowAllowance[owner][spender] = value;
         emit BorrowApproval(owner, spender, value);
@@ -510,7 +512,8 @@ contract Pool {
         emit Borrow(owner, amount, debtShares);
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         updateBorrowRate(_lastAccrued);
-        payable(msg.sender).transfer(amount);
+        (bool success,) = msg.sender.call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 
     function borrowETH(uint256 amount, address referrer) public {
@@ -576,7 +579,8 @@ contract Pool {
         emit Repay(to, amount, debtShares);
         updateBorrowRate(_lastAccrued);
         if(refund > 0) {
-            payable(msg.sender).transfer(refund);
+            (bool success,) = msg.sender.call{value: refund}("");
+            require(success, "ETH transfer failed");
         }
     }
 
@@ -621,13 +625,13 @@ contract Pool {
     function convertToDebtAssets(uint256 debtShares) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
-        return supply == 0 ? debtShares : mulDivDown(debtShares, totalDebt, debtSupply);
+        return supply == 0 ? debtShares : mulDivUp(debtShares, totalDebt, debtSupply);
     }
 
     function convertToDebtShares(uint256 debtAssets) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
-        return supply == 0 ? debtAssets : mulDivUp(debtAssets, debtSupply, totalDebt);
+        return supply == 0 ? debtAssets : mulDivDown(debtAssets, debtSupply, totalDebt);
     }
 
     function getDebtOf(address account) public view returns (uint) {
@@ -642,7 +646,7 @@ contract Pool {
         // if shares is 0, it means that the interest is too small to be accrued
         if(shares == 0) return convertToDebtAssets(debtSharesOf[account]);
         // we use mulDivUp to round down the debt shares
-        return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply);
+        return mulDivUp(debtSharesOf[account], totalDebt + interest, debtSupply);
     }
 
     function pull(address _stuckToken, address dst, uint amount) external {

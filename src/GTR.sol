@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity 0.8.22;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
 contract GTR {
+
+    using ECDSA for bytes32;
+
     /// @notice EIP-20 token name for this token
     string public constant name = "Grace Tokenized Reserve";
 
@@ -198,7 +203,7 @@ contract GTR {
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        address signatory = ecrecover(digest, v, r, s);
+        address signatory = digest.recover(v, r, s);
         require(signatory != address(0), "GTR::delegateBySig: invalid signature");
         require(nonce == nonces[signatory]++, "GTR::delegateBySig: invalid nonce");
         require(block.timestamp <= expiry, "GTR::delegateBySig: signature expired");
@@ -355,7 +360,7 @@ contract GTR {
         bytes32 domainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainId(), address(this)));
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, rawAmount, nonces[owner]++, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        address signatory = ecrecover(digest, v, r, s);
+        address signatory = digest.recover(v, r, s);
         require(signatory != address(0), "GTR::permit: invalid signature");
         require(signatory == owner, "GTR::permit: unauthorized");
         require(block.timestamp <= deadline, "GTR::permit: signature expired");
@@ -394,6 +399,10 @@ contract GTR {
         balances[msg.sender] = sub96(balances[msg.sender], amount, "GTR::burn: burn amount exceeds balance");
         totalSupply = safe96(totalSupply - amount, "GTR::burn: burn amount exceeds totalSupply");
         emit Transfer(msg.sender, address(0), amount);
+
+        // move delegates
+        _moveDelegates(delegates[msg.sender], address(0), amount);
+
         return true;
     }
 

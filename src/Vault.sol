@@ -31,6 +31,7 @@ contract Vault {
     uint public lastUpdate;
     uint public rewardIndexMantissa;
     uint public totalSupply;
+    uint256 private locked = 1;
     bytes32 public immutable DOMAIN_SEPARATOR;
     mapping(address => uint) public balanceOf;
     mapping(address => uint) public nonces;    
@@ -54,6 +55,16 @@ contract Vault {
     modifier onlyWETH() {
         require(isWETH, "onlyWETH");
         _;
+    }
+
+    modifier nonReentrant() virtual {
+        require(locked == 1, "REENTRANCY");
+
+        locked = 2;
+
+        _;
+
+        locked = 1;
     }
 
     receive() external payable {}
@@ -88,18 +99,20 @@ contract Vault {
         balanceOf[recipient] += amount;
         totalSupply += amount;
         pool.transferFrom(msg.sender, address(this), amount);
+        emit Deposit(msg.sender, recipient, amount);
     }
 
     function depositShares(uint amount) external {
         depositShares(amount, msg.sender);
     }
 
-    function depositAsset(uint amount, address recipient) public {
+    function depositAsset(uint amount, address recipient) public nonReentrant {
         updateIndex(recipient);
         asset.safeTransferFrom(msg.sender, address(this), amount);
         uint shares = pool.deposit(amount);
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        emit Deposit(msg.sender, recipient, shares);
     }
 
     function depositAsset(uint amount) external {
@@ -112,6 +125,7 @@ contract Vault {
         uint shares = pool.deposit(msg.value);
         balanceOf[recipient] += shares;
         totalSupply += shares;
+        emit Deposit(msg.sender, recipient, shares);
     }
 
     function depositETH() external payable onlyWETH {
@@ -129,7 +143,9 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         IWETH(address(asset)).withdraw(amount);
-        recipient.transfer(amount);
+        emit Withdraw(msg.sender, recipient, owner, shares);
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Transfer failed.");
     }
 
     function withdrawETH(uint amount) external onlyWETH {
@@ -146,6 +162,7 @@ contract Vault {
         balanceOf[owner] -= amount;
         totalSupply -= amount;
         pool.transfer(recipient, amount);
+        emit Withdraw(msg.sender, recipient, owner, amount);
     }
 
     function withdrawShares(uint amount) external {
@@ -163,6 +180,7 @@ contract Vault {
         balanceOf[owner] -= shares;
         totalSupply -= shares;
         asset.safeTransfer(recipient, amount);
+        emit Withdraw(msg.sender, recipient, owner, shares);
     }
 
     function withdrawAsset(uint amount) external {

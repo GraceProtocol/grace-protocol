@@ -2,6 +2,7 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface ICollateralCore {
     function onCollateralDeposit(address recipient, uint256 amount) external returns (bool);
@@ -20,6 +21,7 @@ interface IWETH is IERC20 {
 contract Collateral {
 
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     struct SeizeEvent {
         uint timestamp;
@@ -299,7 +301,8 @@ contract Collateral {
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
-        receiver.transfer(assets);
+        (bool success, ) = receiver.call{value: assets}("");
+        require(success, "ETH transfer failed");
     }
 
     function withdrawETH(uint256 assets) public returns (uint256 shares) {
@@ -308,7 +311,8 @@ contract Collateral {
 
     function redeem(uint256 shares, address receiver, address owner) public lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
-        assets = previewRedeem(shares);
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -330,7 +334,8 @@ contract Collateral {
 
     function redeemETH(uint256 shares, address payable receiver, address owner) public onlyWETH lock returns (uint256 assets) {
         uint _lastAccrued = accrueFee();
-        assets = previewRedeem(shares);
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "zeroAssets");
         require(core.onCollateralWithdraw(owner, assets), "beforeCollateralWithdraw");
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -344,7 +349,8 @@ contract Collateral {
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         updateFee(_lastAccrued);
-        receiver.transfer(assets);
+        (bool success, ) = receiver.call{value: assets}("");
+        require(success, "ETH transfer failed");
     }
 
     function redeemETH(uint256 shares) public returns (uint256 assets) {
@@ -366,7 +372,7 @@ contract Collateral {
                 keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, shares, nonces[owner]++, deadline))
             )
         );
-        address recoveredAddress = ecrecover(digest, v, r, s);
+        address recoveredAddress = digest.recover(v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, "Collateral: INVALID_SIGNATURE");
         allowance[owner][spender] = shares;
         emit Approval(owner, spender, shares);
@@ -385,6 +391,7 @@ contract Collateral {
         require(msg.sender == address(core), "onlyCore");
         if(assets == type(uint).max) assets = getCollateralOf(account);
         uint shares = convertToShares(assets);
+        require(shares > 0, "zeroShares");
         totalSupply -= shares;
         balanceOf[account] -= shares;
         asset.safeTransfer(to, assets);

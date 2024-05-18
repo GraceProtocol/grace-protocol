@@ -30,6 +30,7 @@ contract VaultFactory {
         weth = _weth;
         operator = msg.sender;
         rewardBudget = _initialRewardBudget;
+        emit BudgetUpdated(_initialRewardBudget);
     }
 
     function allVaultsLength() external view returns (uint) {
@@ -121,6 +122,7 @@ contract VaultFactory {
         require(msg.sender == operator, "onlyOperator");
         updateIndex(address(0));
         rewardBudget = _rewardBudget;
+        emit BudgetUpdated(_rewardBudget);
     }
 
     function getVaultBudget(address vault) external view returns (uint) {
@@ -130,6 +132,7 @@ contract VaultFactory {
 
     event VaultCreated(address vault);
     event WeightUpdated(address vault, uint weight);
+    event BudgetUpdated(uint budget);
     event Claim(address vault, uint amount);
 
 }
