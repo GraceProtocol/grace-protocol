@@ -12,7 +12,7 @@ forge b
 forge t
 ```
 
-### Deploy on Arbitrum Sepolia
+### Deploy on Base Sepolia
 1. Copy the contents of `.env.example` into `.env` and fill the environment variables
 2. Run the bash script below
 ```sh
