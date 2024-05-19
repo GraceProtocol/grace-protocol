@@ -20,6 +20,16 @@ interface ICollateral {
 interface IPool {
     function asset() external view returns (address);
     function getDebtOf(address account) external view returns (uint);
+    function accruedReferrerRewards(address referrer) external view returns (uint);
+    function rewardIndexMantissa() external view returns (uint);
+    function referrerIndexMantissa(address referrer) external view returns (uint);
+    function referrerShares(address referrer) external view returns (uint);
+    function totalReferrerShares() external view returns (uint);
+    function convertToShares(uint amount) external view returns (uint);
+    function lastAccrued() external view returns (uint);
+    function lastBorrowRate() external view returns (uint);
+    function totalDebt() external view returns (uint);
+    function debtSupply() external view returns (uint);
 }
 
 interface IOracle {
@@ -75,5 +85,18 @@ contract Lens {
             string memory symbol = IERC20(asset).symbol();
             symbols = string(abi.encodePacked(symbols, symbol, " "));
         }
+    }
+
+    function getReferrerReward(address core, address pool, address referrer) external view returns (uint reward) {
+        reward = IPool(pool).accruedReferrerRewards(referrer);
+        uint timeElapsed = block.timestamp - IPool(pool).lastAccrued();
+        uint interest = IPool(pool).totalDebt() * IPool(pool).lastBorrowRate() * timeElapsed / 10000 / 365 days;
+        uint shares = IPool(pool).convertToShares(interest);
+        uint referrerReward = shares * IPool(pool).totalReferrerShares() * 1000 / IPool(pool).debtSupply() / 10000;
+        uint rewardIndexMantissa = IPool(pool).rewardIndexMantissa() + (referrerReward * 1e18 / IPool(pool).totalReferrerShares());
+        uint deltaIndex = rewardIndexMantissa - IPool(pool).referrerIndexMantissa(referrer);
+        uint bal = IPool(pool).referrerShares(referrer);
+        uint referrerDelta = bal * deltaIndex;
+        reward += referrerDelta / 1e18;
     }
 }
