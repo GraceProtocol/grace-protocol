@@ -45,7 +45,7 @@ contract SepoliaDeployerScript is Script {
         BorrowController borrowController = new BorrowController();
         RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
         new Lens();
-        // WETH address used on Base Sepolia
+        // WETH address used on Base
         address weth = 0x4200000000000000000000000000000000000006;
 
         /*

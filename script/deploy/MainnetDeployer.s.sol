@@ -1,127 +1,162 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity 0.8.22;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.22;
 
-// // WIP
+import {Script, console2} from "forge-std/Script.sol";
+import {PoolDeployer} from "src/PoolDeployer.sol";
+import {CollateralDeployer} from "src/CollateralDeployer.sol";
+import {Core} from "src/Core.sol";
+import {RateModel} from "src/RateModel.sol";
+import {GTR} from "src/GTR.sol";
+import {Reserve, IERC20} from "src/Reserve.sol";
+import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
+import {VaultFactory} from "src/VaultFactory.sol";
+import {Oracle} from "src/Oracle.sol";
+import {RateProvider} from "src/RateProvider.sol";
+import {BorrowController} from "src/BorrowController.sol";
+import {ERC20} from "test/mocks/ERC20.sol";
+import {Lens} from "src/Lens.sol";
 
-// import {Script, console2} from "forge-std/Script.sol";
-// import {PoolDeployer} from "src/PoolDeployer.sol";
-// import {CollateralDeployer} from "src/CollateralDeployer.sol";
-// import {Core, IRateModel} from "src/Core.sol";
-// import {RateModel} from "src/RateModel.sol";
-// import {Grace} from "src/GRACE.sol";
-// import {Reserve, IERC20} from "src/Reserve.sol";
-// import {Timelock} from "src/Timelock.sol";
-// import {GovernorAlpha} from "src/GovernorAlpha.sol";
-// import {FixedPriceFeed} from "test/mocks/FixedPriceFeed.sol";
-// import {BondFactory} from "src/BondFactory.sol";
-// import {Helper} from "src/Helper.sol";
+interface IERC20Metadata {
+    function symbol() external view returns (string memory);
+}
 
-// interface IERC20Metadata {
-//     function symbol() external view returns (string memory);
-// }
+contract MainnetDeployerScript is Script {
 
-// contract SepoliaDeployerScript is Script {
-//     function setUp() public {}
+    address deployer; // avoid stack too deep error
 
-//     function run() public {
-//         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-//         address deployer = vm.addr(deployerPrivateKey);
-//         vm.startBroadcast(deployerPrivateKey);
-//         // deploy pool deployer
-//         PoolDeployer poolDeployer = new PoolDeployer();
-//         // deploy collateral deployer
-//         CollateralDeployer collateralDeployer = new CollateralDeployer();
-//         // deploy core
-//         Core core = new Core(deployer, address(poolDeployer), address(collateralDeployer));
-//         // deploy interest rate model
-//         RateModel rateModel = new RateModel(9000, 3 days, 0, 2000, 10000);
-//         // connect them to core
-//         //core.setDefaultInterestRateModel(IRateModel(address(rateModel)));
-//         //core.setDefaultCollateralFeeModel(IRateModel(address(rateModel)));
-//         // Deploy Timelock
-//         Timelock timelock = new Timelock(deployer);
-//         // deploy GRACE
-//         Grace grace = new Grace(deployer);
-//         // deploy Reserve
-//         Reserve reserve = new Reserve(address(grace), address(timelock));
-//         // Set reserve as fee destination
-//         core.setFeeDestination(address(reserve));
-//         // WETH address used by Uniswap on Sepolia
-//         address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
-//         // deploy Helper
-//         new Helper(weth);
-//         // Deploy Bond Factory
-//         BondFactory bondFactory = new BondFactory(address(grace), deployer);
-//         // Set Bond Factory as Grace minter
-//         grace.setMinter(address(bondFactory), type(uint).max, type(uint).max);
+    function setUp() public {}
 
-//         // 8 decimal token
-//         address YEENUS = 0x93fCA4c6E2525C09c95269055B46f16b1459BF9d;
-//         // Deploy USDC pool (YEENUS) and bond
-//         deployPool(core, bondFactory, YEENUS, address(0), 10_000_000_000, 1_000_000 * 1e8);
+    function run() public {
+        /*
+            Setup
+        */
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        deployer = vm.addr(deployerPrivateKey);
+        require(deployer != address(0), "deployer address is 0x0");
+        vm.startBroadcast(deployerPrivateKey);
 
-//         // Chainlink feed on Sepolia
-//         address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
-//         // Deploy WETH collateral
-//         deployCollateral(core, weth, ethFeed, 8000, 1000 * 1e18, 2000);
+        /*
+            Deploy dependencies
+        */
+        PoolDeployer poolDeployer = new PoolDeployer();
+        CollateralDeployer collateralDeployer = new CollateralDeployer();
+        Oracle oracle = new Oracle();
+        RateProvider rateProvider = new RateProvider();
+        BorrowController borrowController = new BorrowController();
+        RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
+        new Lens();
+        // WETH address used on Base
+        address weth = 0x4200000000000000000000000000000000000006;
 
-//         // Set BondFactory operator to timelock
-//         bondFactory.setOperator(address(timelock));
-//         // Set core ownership to timelock
-//         core.setOwner(address(timelock));
-//         // Set grace ownership to timelock
-//         grace.setOperator(address(timelock));
-//         // to avoid stack too deep
-//         uint _deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-//         address _deployer = vm.addr(_deployerPrivateKey);
-//         // Deploy GovernorAlpha
-//         GovernorAlpha governor = new GovernorAlpha(address(timelock), address(grace), _deployer);
-//         // Set governor as pending admin of timelock
-//         timelock.setPendingAdmin(address(governor));
-//         // Accept new admin of govenor
-//         governor.__acceptAdmin();
+        /*
+            Deploy Core
+        */
+        Core core = new Core(
+            address(rateProvider),
+            address(borrowController),
+            address(oracle),
+            address(poolDeployer),
+            address(collateralDeployer),
+            weth
+        );
 
-//         vm.stopBroadcast();
-//     }
+        /*
+            Configure RateProvider
+        */
+        rateProvider.setDefaultCollateralFeeModel(address(rateModel));
+        rateProvider.setDefaultInterestRateModel(address(rateModel));
 
-//     function deployPool(
-//         Core core,
-//         BondFactory bondFactory, // if address(0), no bond will be created
-//         address asset,
-//         address feed,
-//         uint fixedPrice,
-//         uint depositCap) public returns (address pool, address bond) {
-//         string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
-//         string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
-//         pool = core.deployPool(name, symbol, asset, feed, fixedPrice, depositCap);
-//         if(address(bondFactory) != address(0)) {
-//             string memory bondName = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " 1-week bond"));
-//             string memory bondSymbol = string(abi.encodePacked("gb", IERC20Metadata(asset).symbol(), "-1W"));
-//             uint bondStart = block.timestamp + 600; // after 10 minutes to leave time for the bond to be created
-//             uint bondDuration = 7 days;
-//             uint auctionDuration = 1 days;
-//             uint initialBudget = 1000 * 1e18;
-//             bond = bondFactory.createBond(
-//                 pool,
-//                 bondName,
-//                 bondSymbol,
-//                 bondStart,
-//                 bondDuration,
-//                 auctionDuration,
-//                 initialBudget
-//             );
-//         }
-//     }
+        /*
+            Deploy GTR
+        */        
+        GTR gtr = new GTR(deployer);
 
-//     function deployCollateral(
-//         Core core,
-//         address underlying,
-//         address feed,
-//         uint collateralFactorBps,
-//         uint hardCapUsd,
-//         uint softCapBps) public returns (address) {
-//         string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(underlying).symbol(), " Collateral"));
-//         string memory symbol = string(abi.encodePacked("gc", IERC20Metadata(underlying).symbol()));
-//         return core.deployCollateral(name, symbol, underlying, feed, collateralFactorBps, hardCapUsd, softCapBps);
-//     }
-// }
+        /*
+            Deploy Reserve
+        */   
+        Reserve reserve = new Reserve(address(gtr));
+        // Set reserve as fee destination
+        core.setFeeDestination(address(reserve));
+
+        /*
+            Deploy VaultFactory
+        */  
+        VaultFactory vaultFactory = new VaultFactory(address(gtr), weth, 100000 * 1e18);
+        // Set vaultFactory as Grace minter
+        gtr.setMinter(address(vaultFactory), type(uint).max);
+
+        /*
+            Deploy Dola pool and vault
+        */
+        address Dola = 0x4621b7A9c75199271F773Ebd9A499dbd165c3191;
+        deployPool(core, vaultFactory, Dola, address(0), 1e18, 10000 * 1e18);
+                
+        /*
+            Deploy USDC pool and vault
+        */
+        address USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+        deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10000 * 1e6);
+
+        /*
+            Deploy WETH collateral
+        */
+        address ethFeed = 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70;
+        deployCollateral(core, weth, ethFeed, 9000, 10000 * 1e18);
+
+        /*
+            Deploy AERO collateral
+        */
+        address aero = 0x940181a94A35A4569E4529A3CDfB74e38FD98631;
+        address aeroFeed = 0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0;
+        deployCollateral(core, aero, aeroFeed, 8000, 10000 * 1e18);
+
+        /*
+            Transfer ownerships
+        */
+        address multisig = 0x986ed016Cc948641dB23749f97FC9Ab84B57d1Fc;
+        oracle.setOwner(multisig);
+        rateProvider.setOwner(multisig);
+        borrowController.setOwner(multisig);
+        core.setOwner(multisig);
+        gtr.setOperator(multisig);
+        reserve.setOwner(multisig);
+        vaultFactory.setOperator(multisig);
+
+        vm.stopBroadcast();
+    }
+
+    function deployPool(
+        Core core,
+        VaultFactory vaultFactory, // if address(0), no vault will be created
+        address asset,
+        address feed,
+        uint fixedPrice,
+        uint depositCap) public returns (address pool, address vault) {
+        string memory name = string(abi.encodePacked("Grace ", IERC20Metadata(asset).symbol(), " Pool"));
+        string memory symbol = string(abi.encodePacked("gp", IERC20Metadata(asset).symbol()));
+        Oracle oracle = Oracle(address(core.oracle()));
+        if(feed != address(0)) {
+            oracle.setPoolFeed(asset, feed);
+        } else {
+            oracle.setPoolFixedPrice(asset, fixedPrice);
+        }
+        pool = core.deployPool(name, symbol, asset, depositCap);
+        if(address(vaultFactory) != address(0)) {
+            vault = vaultFactory.createVault(
+                pool,
+                1
+            );
+        }
+    }
+
+    function deployCollateral(
+        Core core,
+        address underlying,
+        address feed,
+        uint collateralFactorBps,
+        uint hardCapUsd) public returns (address) {
+        Oracle oracle = Oracle(address(core.oracle()));
+        oracle.setCollateralFeed(underlying, feed);
+        return core.deployCollateral(underlying, collateralFactorBps, hardCapUsd);
+    }
+}
