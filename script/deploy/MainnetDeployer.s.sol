@@ -43,7 +43,7 @@ contract MainnetDeployerScript is Script {
         Oracle oracle = new Oracle();
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
-        RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
+        RateModel rateModel = new RateModel(8000, 100, 0, 2500, 10000);
         new Lens();
         // WETH address used on Base
         address weth = 0x4200000000000000000000000000000000000006;
