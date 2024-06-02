@@ -252,11 +252,11 @@ contract PoolTest is Test, MockCore {
         asset.mint(address(this), 1000);
         asset.approve(address(pool), 2000);
         pool.repay(type(uint256).max);
-        // assertEq(asset.balanceOf(address(pool)), 3000);
-        // assertEq(pool.balanceOf(address(this)), 2000);
-        // assertEq(pool.totalSupply(), 4000);
-        // assertEq(pool.lastBalance(), 3000);
-        // assertEq(pool.getAssetsOf(address(this)), 2000);
+        assertEq(asset.balanceOf(address(pool)), 3001);
+        assertEq(pool.balanceOf(address(this)), 2000);
+        assertEq(pool.totalSupply(), 4000);
+        assertEq(pool.lastBalance(), 3001);
+        assertEq(pool.getAssetsOf(address(this)), 2000);
         assertEq(pool.getDebtOf(address(this)), 0);
     }
 
