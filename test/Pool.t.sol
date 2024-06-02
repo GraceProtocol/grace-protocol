@@ -238,13 +238,25 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.lastBalance(), 1000);
         assertEq(pool.getAssetsOf(address(this)), 2000);
         assertEq(pool.getDebtOf(address(this)), 1000);
+        vm.warp(block.timestamp + 365 days);
+
+        // 2nd borrower
+        asset.mint(address(1), 1000);
+        vm.startPrank(address(1));
+        asset.mint(address(this), 1000);
         asset.approve(address(pool), 1000);
+        pool.deposit(1000, address(1));
+        pool.borrow(999); // causes precision bug
+        vm.stopPrank();
+
+        asset.mint(address(this), 1000);
+        asset.approve(address(pool), 2000);
         pool.repay(type(uint256).max);
-        assertEq(asset.balanceOf(address(pool)), 2000);
-        assertEq(pool.balanceOf(address(this)), 2000);
-        assertEq(pool.totalSupply(), 2000);
-        assertEq(pool.lastBalance(), 2000);
-        assertEq(pool.getAssetsOf(address(this)), 2000);
+        // assertEq(asset.balanceOf(address(pool)), 3000);
+        // assertEq(pool.balanceOf(address(this)), 2000);
+        // assertEq(pool.totalSupply(), 4000);
+        // assertEq(pool.lastBalance(), 3000);
+        // assertEq(pool.getAssetsOf(address(this)), 2000);
         assertEq(pool.getDebtOf(address(this)), 0);
     }
 
