@@ -625,13 +625,13 @@ contract Pool {
     function convertToDebtAssets(uint256 debtShares) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
-        return supply == 0 ? debtShares : mulDivUp(debtShares, totalDebt, debtSupply);
+        return supply == 0 ? debtShares : mulDivDown(debtShares, totalDebt, debtSupply);
     }
 
     function convertToDebtShares(uint256 debtAssets) public view returns (uint256) {
         uint256 supply = debtSupply; // Saves an extra SLOAD if debtSupply is non-zero.
 
-        return supply == 0 ? debtAssets : mulDivDown(debtAssets, debtSupply, totalDebt);
+        return supply == 0 ? debtAssets : mulDivUp(debtAssets, debtSupply, totalDebt);
     }
 
     function getDebtOf(address account) public view returns (uint) {
@@ -646,7 +646,7 @@ contract Pool {
         // if shares is 0, it means that the interest is too small to be accrued
         if(shares == 0) return convertToDebtAssets(debtSharesOf[account]);
         // we use mulDivUp to round down the debt shares
-        return mulDivUp(debtSharesOf[account], totalDebt + interest, debtSupply);
+        return mulDivDown(debtSharesOf[account], totalDebt + interest, debtSupply);
     }
 
     function pull(address _stuckToken, address dst, uint amount) external {
