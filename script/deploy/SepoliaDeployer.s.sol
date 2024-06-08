@@ -46,7 +46,7 @@ contract SepoliaDeployerScript is Script {
         RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
         new Lens();
         // WETH address used on Base
-        address weth = 0x4200000000000000000000000000000000000006;
+        address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
 
         /*
             Deploy Core
@@ -121,13 +121,13 @@ contract SepoliaDeployerScript is Script {
         ERC20(payable(WBTC)).setSymbol("WBTC");
         ERC20(payable(WBTC)).setDecimals(8);
         ERC20(payable(WBTC)).mint(deployer, 1_000_000 * 1e8);
-        address wbtcFeed = 0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298;
+        address wbtcFeed = 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43;
         deployPool(core, vaultFactory, WBTC, wbtcFeed, 0, 10_000_000 * 1e8);
 
         /*
             Deploy WETH pool and vault
         */
-        address ethFeed = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1;
+        address ethFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
         deployPool(core, vaultFactory, weth, ethFeed, 0, 10_000 * 1e18);
 
         /*
@@ -138,13 +138,13 @@ contract SepoliaDeployerScript is Script {
         /*
             Deploy Dai collateral
         */
-        address daiFeed = 0xD1092a65338d049DB68D7Be6bD89d17a0929945e;
+        address daiFeed = 0x14866185B1962B63C3Ea9E03Bc1da838bab34C19;
         deployCollateral(core, Dai, daiFeed, 8000, 1_000_000 * 1e18);
 
         /*
             Deploy USDC collateral
         */
-        address usdcFeed = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
+        address usdcFeed = 0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E;
         deployCollateral(core, USDC, usdcFeed, 8000, 1_000_000 * 1e18);
 
         /*
