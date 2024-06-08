@@ -68,16 +68,6 @@ contract Core {
         uint depositCap;
     }
 
-    struct LiquidationEvent {
-        uint timestamp;
-        address borrower;
-        address liquidator;
-        address pool;
-        address collateral;
-        uint debtAmount;
-        uint collateralReward;
-    }
-
     IPoolDeployer public poolDeployer;
     ICollateralDeployer public collateralDeployer;
     address public immutable WETH;
@@ -100,7 +90,6 @@ contract Core {
     mapping (address => IPool[]) public borrowerPools;
     IPool[] public poolList;
     ICollateral[] public collateralList;
-    LiquidationEvent[] public liquidationEvents;
 
     constructor(
         address _rateProvider,
@@ -473,10 +462,6 @@ contract Core {
         return collateralList.length;
     }
 
-    function liquidationEventsCount() external view returns (uint) {
-        return liquidationEvents.length;
-    }
-
     function userCollateralsCount(address user) external view returns (uint) {
         return userCollaterals[user].length;
     }
@@ -569,15 +554,6 @@ contract Core {
             debtToken.forceApprove(address(pool), debtAmount);
             pool.repay(borrower, debtAmount);
             collateral.seize(borrower, collateralReward, msg.sender);
-            liquidationEvents.push(LiquidationEvent({
-                timestamp: block.timestamp,
-                borrower: borrower,
-                liquidator: msg.sender,
-                pool: address(pool),
-                collateral: address(collateral),
-                debtAmount: debtAmount,
-                collateralReward: collateralReward
-            }));
             emit Liquidate(borrower, address(pool), address(collateral), debtAmount, collateralReward);
         }
 

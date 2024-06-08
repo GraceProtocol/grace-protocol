@@ -53,8 +53,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.totalSupply(), 1000);
         assertEq(pool.lastBalance(), 1000);   
         assertEq(pool.getAssetsOf(address(this)), 1000);
-        assertEq(pool.isDepositor(address(this)), true);
-        assertEq(pool.depositors(0), address(this));
     }
 
     function test_depositRecipient() public {
@@ -66,8 +64,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.totalSupply(), 1000);
         assertEq(pool.lastBalance(), 1000);
         assertEq(pool.getAssetsOf(address(1)), 1000);
-        assertEq(pool.isDepositor(address(1)), true);
-        assertEq(pool.depositors(0), address(1));
     }
 
     function test_mint() public {
@@ -79,8 +75,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.totalSupply(), 1000);
         assertEq(pool.lastBalance(), 1000);
         assertEq(pool.getAssetsOf(address(this)), 1000);
-        assertEq(pool.isDepositor(address(this)), true);
-        assertEq(pool.depositors(0), address(this));
     }
 
     function test_mintRecipient() public {
@@ -92,8 +86,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.totalSupply(), 1000);
         assertEq(pool.lastBalance(), 1000);
         assertEq(pool.getAssetsOf(address(1)), 1000);
-        assertEq(pool.isDepositor(address(1)), true);
-        assertEq(pool.depositors(0), address(1));
     }
 
     function test_withdraw() public {
@@ -170,8 +162,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.lastBalance(), 1000);
         assertEq(pool.getAssetsOf(address(1)), 1000);
         assertEq(pool.getAssetsOf(address(this)), 0);
-        assertEq(pool.isDepositor(address(1)), true);
-        assertEq(pool.depositors(1), address(1));
     }
 
     function test_approve_transferFrom() public {
@@ -190,8 +180,6 @@ contract PoolTest is Test, MockCore {
         assertEq(pool.getAssetsOf(address(1)), 1000);
         assertEq(pool.getAssetsOf(address(this)), 0);
         assertEq(pool.allowance(address(this), address(1)), 0);
-        assertEq(pool.isDepositor(address(1)), true);
-        assertEq(pool.depositors(1), address(1));
     }
 
     function test_borrow_repay() public {
@@ -201,8 +189,6 @@ contract PoolTest is Test, MockCore {
         vm.expectRevert("minimumBalance");
         pool.borrow(2000);
         pool.borrow(1000);
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(asset.balanceOf(address(this)), 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -228,8 +214,6 @@ contract PoolTest is Test, MockCore {
         vm.expectRevert("minimumBalance");
         pool.borrow(2000);
         pool.borrow(1000);
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(asset.balanceOf(address(this)), 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -267,8 +251,6 @@ contract PoolTest is Test, MockCore {
         pool.approveBorrow(address(1), 1000);
         vm.prank(address(1));
         pool.borrow(1000, address(0), address(this));
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(asset.balanceOf(address(1)), 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -286,8 +268,6 @@ contract PoolTest is Test, MockCore {
         vm.expectRevert("minimumBalance");
         pool.borrow(2000);
         pool.borrow(1000);
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(asset.balanceOf(address(this)), 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -316,8 +296,6 @@ contract PoolTest is Test, MockCore {
         pool.borrowETH(2000);
         uint balance = address(this).balance;
         pool.borrowETH(1000);
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(address(this).balance, balance + 1000);
         assertEq(pool.balanceOf(address(this)), 2000);
@@ -344,8 +322,6 @@ contract PoolTest is Test, MockCore {
         pool.borrowETH(2000);
         uint balance = address(this).balance;
         pool.borrowETH(1000);
-        assertEq(pool.isBorrower(address(this)), true);
-        assertEq(pool.borrowers(0), address(this));
         assertEq(asset.balanceOf(address(pool)), 1000);
         assertEq(address(this).balance, balance + 1000);
         assertEq(pool.balanceOf(address(this)), 2000);

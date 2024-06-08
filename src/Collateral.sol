@@ -23,13 +23,6 @@ contract Collateral {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
 
-    struct SeizeEvent {
-        uint timestamp;
-        address account;
-        uint256 assets;
-        address to;
-    }
-
     IERC20 public immutable asset;
     bool public isWETH;
     ICollateralCore public immutable core;
@@ -45,9 +38,6 @@ contract Collateral {
     mapping (address => uint) public balanceOf;
     mapping (address => mapping (address => uint256)) public allowance;
     mapping(address => uint) public nonces;
-    mapping(address => bool) public isDepositor;
-    address[] public depositors;
-    SeizeEvent[] public seizeEvents;
 
     constructor(IERC20 _asset, bool _isWETH, address _core) {
         asset = _asset;
@@ -101,10 +91,6 @@ contract Collateral {
         if(fee == 0) return _lastAccrued;
         lastAccrued = block.timestamp;
         asset.safeTransfer(core.feeDestination(), fee);
-    }
-
-    function allDepositorsLength() public view returns (uint) {
-        return depositors.length;
     }
 
     function updateFee(uint _lastAccrued) internal {
@@ -188,20 +174,12 @@ contract Collateral {
         return convertToAssets(shares);
     }
 
-    function addToDepositors(address account) internal {
-        if(!isDepositor[account]) {
-            isDepositor[account] = true;
-            depositors.push(account);
-        }
-    }
-
     function deposit(uint256 assets, address recipient) public lock returns (uint256 shares) {
         uint _lastAccrued = accrueFee();
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         require((shares = previewDeposit(assets)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -219,7 +197,6 @@ contract Collateral {
         require((shares = previewDeposit(msg.value)) != 0, "zeroShares");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        addToDepositors(recipient);
         IWETH(address(asset)).deposit{value: msg.value}();
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -243,7 +220,6 @@ contract Collateral {
         require(core.onCollateralDeposit(recipient, assets), "beforeCollateralDeposit");
         balanceOf[recipient] += shares;
         totalSupply += shares;
-        addToDepositors(recipient);
         asset.safeTransferFrom(msg.sender, address(this), assets);
         lastBalance = asset.balanceOf(address(this));
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
@@ -382,10 +358,6 @@ contract Collateral {
         return convertToAssets(balanceOf[account]);
     }
 
-    function seizeEventsCount() public view returns (uint256) {
-        return seizeEvents.length;
-    }
-
     function seize(address account, uint256 assets, address to) public lock {
         uint _lastAccrued = accrueFee();
         require(msg.sender == address(core), "onlyCore");
@@ -399,7 +371,6 @@ contract Collateral {
         require(lastBalance >= MINIMUM_BALANCE, "minimumBalance");
         emit Withdraw(msg.sender, to, account, shares, assets);
         emit Seize(account, to, assets, shares);
-        seizeEvents.push(SeizeEvent(block.timestamp, account, assets, to));
         updateFee(_lastAccrued);
     }
 
