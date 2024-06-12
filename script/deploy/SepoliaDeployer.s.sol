@@ -15,6 +15,7 @@ import {RateProvider} from "src/RateProvider.sol";
 import {BorrowController} from "src/BorrowController.sol";
 import {ERC20} from "test/mocks/ERC20.sol";
 import {Lens} from "src/Lens.sol";
+import {ClaimHelper} from "src/ClaimHelper.sol";
 
 interface IERC20Metadata {
     function symbol() external view returns (string memory);
@@ -44,6 +45,7 @@ contract SepoliaDeployerScript is Script {
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
         RateModel rateModel = new RateModel(8000, 100, 100, 2500, 10000);
+        new ClaimHelper();
         new Lens();
         // WETH address used on Base
         address weth = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
