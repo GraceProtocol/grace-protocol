@@ -288,7 +288,7 @@ contract VaultTest is Test {
         uint claimable = 1e18;
         factory.setClaimable(claimable);
         skip(1);
-        vault.claim();
+        vault.claim(address(this));
         assertEq(gtr.balanceOf(address(this)), claimable);
     }
 
