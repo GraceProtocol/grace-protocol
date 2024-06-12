@@ -196,12 +196,16 @@ contract Vault {
         return (accruedRewards[user] + accountDelta);
     }
 
-    function claim(address user) external {
+    function claim(address user) public {
         updateIndex(user);
         uint amount = accruedRewards[user];
         accruedRewards[user] = 0;
         gtr.transfer(user, amount);
         emit Claim(user, amount);
+    }
+
+    function claim() external {
+        claim(msg.sender);
     }
 
     function approve(address spender, uint256 amount) external returns (bool) {
