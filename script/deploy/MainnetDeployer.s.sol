@@ -47,8 +47,8 @@ contract MainnetDeployerScript is Script {
         RateModel rateModel = new RateModel(8000, 100, 0, 2500, 10000);
         new ClaimHelper();
         new Lens();
-        // WETH address used on Base
-        address weth = 0x4200000000000000000000000000000000000006;
+        // WETH address used on Ethereum
+        address weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
         /*
             Deploy Core
@@ -90,32 +90,31 @@ contract MainnetDeployerScript is Script {
         /*
             Deploy Dola pool and vault
         */
-        address Dola = 0x4621b7A9c75199271F773Ebd9A499dbd165c3191;
+        address Dola = 0x865377367054516e17014CcdED1e7d814EDC9ce4;
         deployPool(core, vaultFactory, Dola, address(0), 1e18, 10000 * 1e18);
+
+        /*
+            Deploy Dai pool and vault
+        */
+        address Dai = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+        deployPool(core, vaultFactory, Dai, address(0), 1e18, 10000 * 1e18);
                 
         /*
             Deploy USDC pool and vault
         */
-        address USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+        address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
         deployPool(core, vaultFactory, USDC, address(0), 1e18 * (10 ** (18-6)), 10000 * 1e6);
 
         /*
-            Deploy WETH collateral
+            Deploy USDT pool and vault
         */
-        address ethFeed = 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70;
-        deployCollateral(core, weth, ethFeed, 9000, 10000 * 1e18);
-
-        /*
-            Deploy AERO collateral
-        */
-        address aero = 0x940181a94A35A4569E4529A3CDfB74e38FD98631;
-        address aeroFeed = 0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0;
-        deployCollateral(core, aero, aeroFeed, 8000, 10000 * 1e18);
+        address USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+        deployPool(core, vaultFactory, USDT, address(0), 1e18 * (10 ** (18-6)), 10000 * 1e6);
 
         /*
             Transfer ownerships
         */
-        address multisig = 0x986ed016Cc948641dB23749f97FC9Ab84B57d1Fc;
+        address multisig = 0x1Ff88228EEbce659B2b80C0458C84Bb013f1b381;
         oracle.setOwner(multisig);
         rateProvider.setOwner(multisig);
         borrowController.setOwner(multisig);
@@ -151,14 +150,4 @@ contract MainnetDeployerScript is Script {
         }
     }
 
-    function deployCollateral(
-        Core core,
-        address underlying,
-        address feed,
-        uint collateralFactorBps,
-        uint hardCapUsd) public returns (address) {
-        Oracle oracle = Oracle(address(core.oracle()));
-        oracle.setCollateralFeed(underlying, feed);
-        return core.deployCollateral(underlying, collateralFactorBps, hardCapUsd);
-    }
 }
