@@ -420,7 +420,7 @@ contract PoolTest is Test, MockCore {
         vm.warp(block.timestamp + 365 days);
         assertEq(pool.balanceOf(REFERRER), 0);
         vm.startPrank(REFERRER);
-        pool.claimReferralRewards();
+        pool.claimReferralRewards(REFERRER);
         assertEq(pool.balanceOf(REFERRER), BORROW / 10);
         pool.redeem(BORROW / 10);
         assertEq(asset.balanceOf(REFERRER), BORROW / 10);

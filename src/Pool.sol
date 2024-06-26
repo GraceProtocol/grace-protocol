@@ -566,12 +566,12 @@ contract Pool {
         updateBorrowRate(_lastAccrued);
     }
 
-    function claimReferralRewards() external {
+    function claimReferralRewards(address user) external {
         accrueInterest();
-        updateReferrer(msg.sender);
-        uint amount = accruedReferrerRewards[msg.sender];
-        accruedReferrerRewards[msg.sender] = 0;
-        IERC20(address(this)).transfer(msg.sender, amount);
+        updateReferrer(user);
+        uint amount = accruedReferrerRewards[user];
+        accruedReferrerRewards[user] = 0;
+        IERC20(address(this)).transfer(user, amount);
     }
 
     function getAssetsOf(address account) public view returns (uint) {
