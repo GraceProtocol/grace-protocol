@@ -44,7 +44,8 @@ contract MainnetDeployerScript is Script {
         Oracle oracle = new Oracle();
         RateProvider rateProvider = new RateProvider();
         BorrowController borrowController = new BorrowController();
-        RateModel rateModel = new RateModel(8000, 100, 0, 2500, 10000);
+        RateModel interestRateModel = new RateModel(8000, 100, 0, 1500, 10000);
+        RateModel collateralRateModel = new RateModel(5000, 100, 0, 0, 10000);
         new ClaimHelper();
         new Lens();
         // WETH address used on Ethereum
@@ -65,8 +66,8 @@ contract MainnetDeployerScript is Script {
         /*
             Configure RateProvider
         */
-        rateProvider.setDefaultCollateralFeeModel(address(rateModel));
-        rateProvider.setDefaultInterestRateModel(address(rateModel));
+        rateProvider.setDefaultCollateralFeeModel(address(collateralRateModel));
+        rateProvider.setDefaultInterestRateModel(address(interestRateModel));
 
         /*
             Deploy GTR
