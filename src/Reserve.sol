@@ -53,7 +53,7 @@ contract Reserve {
         for(uint i = 0; i < request.tokens.length; i++) {
             uint bal = request.tokens[i].balanceOf(address(this));
             uint amount = request.amounts[i] > bal ? bal : request.amounts[i];
-            request.tokens[i].approve(request.dst, amount);
+            request.tokens[i].forceApprove(request.dst, amount);
         }
         locked = 1;
         emit AllowanceExecuted(request.amounts, request.tokens, request.dst);

@@ -49,7 +49,7 @@ contract Vault {
         factory = IFactory(msg.sender);
         isWETH = _isWETH;
         gtr = IERC20(_gtr);
-        asset.approve(_pool, type(uint256).max);
+        asset.forceApprove(_pool, type(uint256).max);
     }
 
     modifier onlyWETH() {
@@ -91,7 +91,7 @@ contract Vault {
     }
 
     function reapprove() external {
-        asset.approve(address(pool), type(uint256).max);
+        asset.forceApprove(address(pool), type(uint256).max);
     }
 
     function depositShares(uint amount, address recipient) public {
