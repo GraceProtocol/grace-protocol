@@ -11,7 +11,6 @@ interface IERC20Metadata {
 contract RateModelMainnetDeployerScript is Script {
     
     uint public constant KINK_BPS = 8000;
-    uint public constant BPS_PER_DAY = 100;
     uint public constant MIN_RATE = 0;
     uint public constant KINK_RATE = 1500;
     uint public constant MAX_RATE = 10000;
@@ -32,6 +31,6 @@ contract RateModelMainnetDeployerScript is Script {
         /*
             Deploy RateModel
         */
-        new RateModel(KINK_BPS, BPS_PER_DAY, MIN_RATE, KINK_RATE, MAX_RATE);
+        new RateModel(KINK_BPS, MIN_RATE, KINK_RATE, MAX_RATE);
     }
 }
